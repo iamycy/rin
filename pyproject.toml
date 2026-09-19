@@ -1,0 +1,42 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "rin-pitch"
+version = "0.1.0"
+description = "Relative Interval Network (RIN) pitch smoothing: fuse absolute F0 estimates with multi-hop VQT relative pitch differences through a network-flow LP"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Chin-Yun Yu" }]
+keywords = ["pitch-tracking", "f0-estimation", "vqt", "network-flow", "audio"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Multimedia :: Sound/Audio :: Analysis",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+]
+dependencies = [
+    "numpy>=2",
+    "scipy",
+    "librosa",
+]
+
+[project.urls]
+Homepage = "https://github.com/iamycy/rin"
+Repository = "https://github.com/iamycy/rin"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/rin"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP"]

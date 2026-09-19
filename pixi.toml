@@ -1,0 +1,31 @@
+[workspace]
+name = "rin-pitch"
+version = "0.1.0"
+description = "Relative Interval Network (RIN) pitch smoothing: fuse absolute F0 estimates with multi-hop VQT relative pitch differences through a network-flow LP"
+authors = ["Chin-Yun Yu"]
+channels = ["conda-forge"]
+platforms = ["linux-64", "osx-arm64", "osx-64", "win-64"]
+
+[dependencies]
+python = ">=3.10,<3.14"
+pip = "*"
+numpy = ">=2"
+scipy = "*"
+librosa = "*"
+
+[pypi-dependencies]
+rin-pitch = { path = ".", editable = true }
+
+[feature.dev.dependencies]
+pytest = "*"
+ruff = "*"
+python-build = "*"
+
+[environments]
+default = ["dev"]
+
+[tasks]
+test = { cmd = "pytest -v", description = "Run the test suite" }
+lint = { cmd = "ruff check src tests", description = "Lint with ruff" }
+format = { cmd = "ruff format src tests", description = "Format with ruff" }
+build = { cmd = "python -m build", description = "Build sdist and wheel" }

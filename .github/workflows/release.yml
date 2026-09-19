@@ -1,0 +1,26 @@
+name: Release
+
+# Publish to PyPI on version tags, e.g. v0.1.0.
+# First release: create a pending trusted publisher for the `rin-pitch`
+# project at https://pypi.org/manage/project/rin-pitch/settings/publishing/
+# pointing at this repo before pushing the tag.
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: prefix-dev/setup-pixi@v0.8.1
+        with:
+          pixi-version: latest
+      - run: pixi run lint
+      - run: pixi run test
+      - run: pixi run build
+      - uses: pypa/gh-action-pypi-publish@release/v1
