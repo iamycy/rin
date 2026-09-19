@@ -1,13 +1,13 @@
-"""End-to-end test: a caller wires the two cores directly.
+"""End-to-end test: a caller wires the three cores directly.
 
 This is the intended usage pattern -- the package does no caching and no
-file loading; each caller manages their own pipeline around the two core
+file loading; each caller manages their own pipeline around the three core
 functions.
 """
 
 import numpy as np
 
-from rin import lp_smoother, vqt_diff_calculator
+from rin import estimate_voicing, lp_smoother, vqt_diff_calculator
 
 SR = 16000
 HOP = int(0.02 * SR)
@@ -40,7 +40,8 @@ def test_pipeline_reduces_noise():
     voiced = np.isfinite(noisy_f0)
     f0_cents = _hz2cent(np.where(voiced, noisy_f0, 1.0))
     abs_conf = np.where(voiced, strength, 0.0)
-    smooth_cents, voicing = lp_smoother(f0_cents, abs_conf, edges, estimates, confidences)
+    smooth_cents = lp_smoother(f0_cents, abs_conf, edges, estimates, confidences)
+    voicing = estimate_voicing(abs_conf, edges, confidences)
     f0_smooth = _cent2hz(smooth_cents)
 
     def rmse(a, b):

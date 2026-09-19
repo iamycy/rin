@@ -1,6 +1,6 @@
-"""Contract tests: custom functions can replace the two cores.
+"""Contract tests: custom functions can replace the three cores.
 
-The package exposes exactly two core functions; each obeys one of the
+The package exposes exactly three core functions; each obeys one of the
 ``rin.interfaces`` signatures. A caller swaps in their own implementation
 by calling their own function instead -- no wrapper, no registration.
 """
@@ -10,7 +10,7 @@ import inspect
 
 import numpy as np
 
-from rin import lp_smoother, vqt_diff_calculator
+from rin import estimate_voicing, lp_smoother, vqt_diff_calculator
 
 SR = 16000
 HOP = int(0.02 * SR)
@@ -28,8 +28,13 @@ def zero_estimator(x, sr, hop_length, hops):
 
 
 def identity_solver(abs_estimates, abs_confidences, rel_edges, rel_estimates, rel_confidences):
-    """Pass-through solver: smoothed = absolute, voicing = strength."""
-    return abs_estimates.copy(), np.clip(abs_confidences, 0, 1)
+    """Pass-through solver: smoothed = absolute."""
+    return abs_estimates.copy()
+
+
+def dummy_voicing(abs_confidences, rel_edges, rel_confidences):
+    """Trivial voicing: just the absolute confidences."""
+    return np.clip(abs_confidences, 0, 1)
 
 
 class CallableSolver:
@@ -52,18 +57,20 @@ def test_builtin_cores_match_documented_signatures():
         "rel_estimates",
         "rel_confidences",
     ]
+    voicing_params = list(inspect.signature(estimate_voicing).parameters)
+    assert voicing_params == ["abs_confidences", "rel_edges", "rel_confidences"]
 
 
 def test_caller_wires_custom_functions():
     rng = np.random.default_rng(0)
-    n_frames, M = 40, 40
+    n_frames = 40
     x = rng.standard_normal(n_frames * HOP)
     f0_cents = 6900.0 + rng.normal(0, 5, n_frames)
     strength = np.full(n_frames, 0.9)
 
     edges, est, conf = zero_estimator(x, SR, HOP, (1, 2))
-    assert M == n_frames
-    sm_cents, voicing = identity_solver(f0_cents, strength, edges, est, conf)
+    sm_cents = identity_solver(f0_cents, strength, edges, est, conf)
+    voicing = dummy_voicing(strength, edges, conf)
     np.testing.assert_allclose(sm_cents, f0_cents, rtol=1e-12)
     np.testing.assert_allclose(voicing, strength, rtol=1e-12)
 
@@ -79,8 +86,9 @@ def test_any_callable_shape_is_accepted():
     est = functools.partial(zero_estimator)
     solve = CallableSolver()
     edges, _, _ = est(x, SR, HOP, (1,))
-    sm_cents, _ = solve(f0_cents, strength, edges, np.zeros(0), np.zeros(0))
+    sm_cents = solve(f0_cents, strength, edges, np.zeros(0), np.zeros(0))
     np.testing.assert_allclose(sm_cents, f0_cents, rtol=1e-12)
+    np.testing.assert_allclose(dummy_voicing(strength, edges, np.zeros(0)), strength)
 
     lam = lambda xc, s, h, hp: zero_estimator(xc, s, h, hp)  # noqa: E731
     edges, _, _ = lam(x, SR, HOP, (1,))

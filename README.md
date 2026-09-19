@@ -25,7 +25,7 @@ pip install rin-pitch
 
 ```python
 import numpy as np
-from rin import lp_smoother, vqt_diff_calculator
+from rin import estimate_voicing, lp_smoother, vqt_diff_calculator
 
 # x: mono waveform, sr: sample rate
 # f0: (M,) absolute pitch in Hz on a 20 ms grid, NaN = unvoiced
@@ -41,17 +41,20 @@ edges, estimates, confidences = vqt_diff_calculator(x, sr, hop_length, hops=(1, 
 voiced = np.isfinite(f0)
 f0_cents = 1200 * np.log2(np.where(voiced, f0, 1.0))
 abs_conf = np.where(voiced, strength, 0.0)
-smooth_cents, voicing = lp_smoother(f0_cents, abs_conf, edges, estimates, confidences)
+smooth_cents = lp_smoother(f0_cents, abs_conf, edges, estimates, confidences)
+
+# 3. per-frame voicing from the absolute and relative confidences
+voicing = estimate_voicing(abs_conf, edges, confidences)
 f0_smooth = 2 ** (smooth_cents / 1200)
 ```
 
 Arrays in, arrays out -- the package does no file loading and no caching.
 Each caller wires their own pipeline (and their own VQT caching) around the
-two cores.
+three cores.
 
 ## API
 
-Two core functions:
+Three core functions:
 
 - `rin.vqt_diff_calculator(x, sr, hop_length, hops=(1,), ...)` -- multi-hop
   relative pitch differences (cents) with confidences. Extra VQT options
@@ -59,15 +62,17 @@ Two core functions:
   plain kwargs -- pass your own.
 - `rin.lp_smoother(abs_estimates, abs_confidences, rel_edges, rel_estimates,
   rel_confidences, dual_form=True)` -- network-flow LP fusion; inputs and
-  outputs in cents.
+  output in cents.
+- `rin.estimate_voicing(abs_confidences, rel_edges, rel_confidences)` --
+  per-frame voicing probabilities from the two confidence streams.
 
 ## Plugins
 
-Both cores are plain functions obeying the contracts in `rin.interfaces`
-(`DifferenceEstimator` and `Solver` are `Callable` type aliases). Implement
-your own function with the same signature and call it instead -- no classes
-or inheritance needed; any callable (function, lambda, `functools.partial`,
-callable object) works:
+Each core is a plain function obeying a contract in `rin.interfaces`
+(`DifferenceEstimator`, `Solver`, and `VoicingEstimator` are `Callable`
+type aliases). Implement your own function with the same signature and call
+it instead -- no classes or inheritance needed; any callable (function,
+lambda, `functools.partial`, callable object) works:
 
 ```python
 def my_estimator(x, sr, hop_length, hops):
@@ -75,11 +80,16 @@ def my_estimator(x, sr, hop_length, hops):
     ...
 
 def my_solver(abs_estimates, abs_confidences, rel_edges, rel_estimates, rel_confidences):
-    # -> (smooth_pitch (M,) cents, voicing (M,) in [0,1])
+    # -> smooth_pitch (M,) cents
+    ...
+
+def my_voicing(abs_confidences, rel_edges, rel_confidences):
+    # -> voicing (M,) in [0,1]
     ...
 
 edges, estimates, confidences = my_estimator(x, sr, hop_length, hops=(1, 2, 3, 5))
-smooth_cents, voicing = my_solver(f0_cents, strength, edges, estimates, confidences)
+smooth_cents = my_solver(f0_cents, abs_conf, edges, estimates, confidences)
+voicing = my_voicing(abs_conf, edges, confidences)
 ```
 
 ## Development

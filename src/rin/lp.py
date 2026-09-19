@@ -22,6 +22,79 @@ from scipy.optimize import linprog
 from scipy.sparse import csr_matrix
 
 
+def _edge_keep_mask(rel_edges: np.ndarray, rel_confidences: np.ndarray, M: int) -> np.ndarray:
+    """Boolean mask dropping out-of-range and zero-weight relative edges."""
+    valid = np.all((rel_edges >= 0) & (rel_edges < M), axis=1)
+    return valid & (rel_confidences > 0)
+
+
+def estimate_voicing(
+    abs_confidences: np.ndarray,
+    rel_edges: np.ndarray,
+    rel_confidences: np.ndarray,
+) -> np.ndarray:
+    """Fuse absolute confidences with incident relative-edge confidences.
+
+    Distance-weighted root-mean-square (RMS, p=2 with 1/m^2 distance decay)
+    fusion: integrates incident relative edge confidences while giving
+    higher priority to short-hop edges (d = 1/m^2), combined with the
+    tracker's absolute confidence (in [0, 1]) via a fuzzy AND (geometric
+    mean).
+
+    Args:
+        abs_confidences: (M,) confidence/weight of each absolute estimate.
+        rel_edges: (E, 2) frame-index pairs (u, v) for each relative edge.
+        rel_confidences: (E,) confidence/weight of each relative estimate.
+
+    Returns:
+        voicing: (M,) voicing probabilities in [0, 1].
+
+    Raises:
+        ValueError: if shapes disagree, values are non-finite, confidences
+            are negative, or ``rel_edges`` is not an ``(E, 2)`` integer array.
+
+    Notes:
+        Edges referencing frames outside ``[0, M)`` are dropped, as are
+        zero-weight edges (they carry no voicing evidence).
+    """
+    abs_confidences = np.asarray(abs_confidences, dtype=float)
+    rel_confidences = np.asarray(rel_confidences, dtype=float)
+    rel_edges = np.asarray(rel_edges)
+    if rel_edges.size == 0:
+        rel_edges = np.zeros((0, 2), dtype=int)
+    if abs_confidences.ndim != 1 or rel_edges.ndim != 2 or rel_edges.shape[1] != 2:
+        raise ValueError("expected abs_confidences 1-D of length M and rel_edges of shape (E, 2)")
+    if not np.issubdtype(rel_edges.dtype, np.integer):
+        raise ValueError("rel_edges must contain integer frame indices")
+    if rel_confidences.shape != (len(rel_edges),):
+        raise ValueError("rel_confidences must have length E")
+    if not (np.isfinite(abs_confidences).all() and np.isfinite(rel_confidences).all()):
+        raise ValueError("confidences must be finite")
+    if (abs_confidences < 0).any() or (rel_confidences < 0).any():
+        raise ValueError("confidences must be non-negative")
+
+    M = abs_confidences.size
+    keep = _edge_keep_mask(rel_edges, rel_confidences, M)
+    rel_edges = rel_edges[keep]
+    rel_confidences = rel_confidences[keep]
+
+    hops = np.maximum(np.abs(rel_edges[:, 1] - rel_edges[:, 0]), 1)
+    d = 1.0 / (hops.astype(float) ** 2)
+    num_sparse = csr_matrix(
+        (d * (rel_confidences**2), (rel_edges[:, 0], rel_edges[:, 1])), shape=(M, M)
+    )
+    num_sym = num_sparse + num_sparse.T
+    num = num_sym.sum(axis=1).A1
+
+    den_sparse = csr_matrix((d, (rel_edges[:, 0], rel_edges[:, 1])), shape=(M, M))
+    den_sym = den_sparse + den_sparse.T
+    den = den_sym.sum(axis=1).A1
+
+    rel_rms = np.sqrt(np.divide(num, np.maximum(den, 1e-10)))
+    voicing = np.sqrt(np.clip(abs_confidences, 0.0, 1.0) * np.clip(rel_rms, 0.0, 1.0))
+    return voicing
+
+
 def lp_smoother(
     abs_estimates: np.ndarray,
     abs_confidences: np.ndarray,
@@ -29,7 +102,7 @@ def lp_smoother(
     rel_estimates: np.ndarray,
     rel_confidences: np.ndarray,
     dual_form: bool = True,
-) -> tuple[np.ndarray, np.ndarray]:
+) -> np.ndarray:
     """Smooth absolute pitch estimates with relative pitch constraints.
 
     Args:
@@ -44,9 +117,6 @@ def lp_smoother(
 
     Returns:
         smooth_pitch: (M,) smoothed pitch contour, in cents.
-        new_voicing_probs: (M,) voicing probabilities fusing the absolute
-            confidences with the distance-weighted (1/m^2) RMS of the incident
-            relative-edge confidences, via a geometric mean.
 
     Raises:
         ValueError: if shapes disagree, values are non-finite, confidences
@@ -55,6 +125,7 @@ def lp_smoother(
     Notes:
         Edges referencing frames outside ``[0, M)`` are dropped, as are
         zero-weight edges (they cannot bind the optimum in either form).
+        Voicing is a separate concern -- see :func:`estimate_voicing`.
     """
     abs_estimates = np.asarray(abs_estimates, dtype=float)
     abs_confidences = np.asarray(abs_confidences, dtype=float)
@@ -87,19 +158,11 @@ def lp_smoother(
         raise ValueError("confidences must be non-negative")
 
     M = abs_estimates.size
-    # Drop edges referencing frames outside [0, M): they carry no constraint.
-    valid = np.all((rel_edges >= 0) & (rel_edges < M), axis=1)
-    rel_edges = rel_edges[valid]
-    rel_estimates = rel_estimates[valid]
-    rel_confidences = rel_confidences[valid]
-
-    # drop zero-weight relative edges: in the dual formulation, zero capacity
-    # bounds [-0, 0] allow no flow; in the primal, zero-cost slack variables
-    # would make the LP unbounded. Neither binds on f or affects the optimum.
-    mask = rel_confidences > 0
-    rel_edges = rel_edges[mask]
-    rel_estimates = rel_estimates[mask]
-    rel_confidences = rel_confidences[mask]
+    # Drop out-of-range and zero-weight edges (shared with estimate_voicing).
+    keep = _edge_keep_mask(rel_edges, rel_confidences, M)
+    rel_edges = rel_edges[keep]
+    rel_estimates = rel_estimates[keep]
+    rel_confidences = rel_confidences[keep]
 
     abs_conf_lp = np.maximum(abs_confidences, 1e-6)
     E = len(rel_estimates)
@@ -197,23 +260,4 @@ def lp_smoother(
             raise ValueError("LP smoothing failed: " + res.message)
         smooth_pitch = res.x[:M]
 
-    # Distance-weighted root-mean-square (RMS, p=2 with 1/m^2 distance decay)
-    # voicing fusion: integrates incident relative edge confidences while giving
-    # higher priority to short-hop edges (d = 1/m^2), combined with the tracker's
-    # absolute confidence (s in [0, 1]) via a fuzzy AND (geometric mean).
-    hops = np.maximum(np.abs(rel_edges[:, 1] - rel_edges[:, 0]), 1)
-    d = 1.0 / (hops.astype(float) ** 2)
-    num_sparse = csr_matrix(
-        (d * (rel_confidences**2), (rel_edges[:, 0], rel_edges[:, 1])), shape=(M, M)
-    )
-    num_sym = num_sparse + num_sparse.T
-    num = num_sym.sum(axis=1).A1
-
-    den_sparse = csr_matrix((d, (rel_edges[:, 0], rel_edges[:, 1])), shape=(M, M))
-    den_sym = den_sparse + den_sparse.T
-    den = den_sym.sum(axis=1).A1
-
-    rel_rms = np.sqrt(np.divide(num, np.maximum(den, 1e-10)))
-    new_voicing_probs = np.sqrt(np.clip(abs_confidences, 0.0, 1.0) * np.clip(rel_rms, 0.0, 1.0))
-
-    return smooth_pitch, new_voicing_probs
+    return smooth_pitch

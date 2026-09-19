@@ -38,12 +38,12 @@ Returns:
 
 Solver: TypeAlias = Callable[
     [np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray],
-    tuple[np.ndarray, np.ndarray],
+    np.ndarray,
 ]
 """Fuse absolute pitch estimates with relative pitch differences.
 
 Signature: ``(abs_estimates, abs_confidences, rel_edges, rel_estimates,
-rel_confidences) -> (smooth_pitch, voicing)``.
+rel_confidences) -> smooth_pitch``.
 
 Args:
     abs_estimates: ``(M,)`` absolute pitch per frame, in cents.
@@ -54,5 +54,21 @@ Args:
 
 Returns:
     smooth_pitch: ``(M,)`` fused pitch contour, in cents.
+"""
+
+VoicingEstimator: TypeAlias = Callable[
+    [np.ndarray, np.ndarray, np.ndarray],
+    np.ndarray,
+]
+"""Estimate per-frame voicing from confidences.
+
+Signature: ``(abs_confidences, rel_edges, rel_confidences) -> voicing``.
+
+Args:
+    abs_confidences: ``(M,)`` weights in ``[0, 1]``.
+    rel_edges: ``(E, 2)`` integer frame-index pairs.
+    rel_confidences: ``(E,)`` weights in ``[0, 1]``.
+
+Returns:
     voicing: ``(M,)`` voicing probabilities in ``[0, 1]``.
 """
