@@ -1,0 +1,58 @@
+# conda-forge recipe for rin-pitch.
+#
+# This is the recipe to submit when ready; it is NOT submitted yet.
+# Submission path (needs explicit approval for each public step):
+#   1. Publish rin-pitch to PyPI first (blocked before 2026-09-23 by owner
+#      decision; needs trusted-publisher setup, see .github/workflows/release.yml).
+#   2. Fill in the real sha256 below from the PyPI sdist file page.
+#   3. Add your GitHub username(s) under recipe-maintainers.
+#   4. Open a PR against conda-forge/staged-recipes with this file as
+#      recipe/meta.yaml. Merging creates the rin-pitch-feedstock repo.
+#   5. After that, the conda-forge autotick bot opens version-bump PRs
+#      automatically on every PyPI release -- no manual work per release.
+#
+# Local validation: `pixi build` in the repo root builds the equivalent
+# noarch conda package from the same pyproject.toml (see the [package]
+# section in pixi.toml).
+
+{% set name = "rin-pitch" %}
+{% set version = "0.1.0" %}
+
+package:
+  name: {{ name|lower }}
+  version: {{ version }}
+
+source:
+  url: https://pypi.org/packages/source/{{ name[0] }}/{{ name }}/{{ name }}-{{ version }}.tar.gz
+  # !!! Replace with the real sha256 after the first PyPI release !!!
+  sha256: 0000000000000000000000000000000000000000000000000000000000000000
+
+build:
+  noarch: python
+  script: {{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation
+  number: 0
+
+requirements:
+  host:
+    - python >=3.10
+    - pip
+    - hatchling
+  run:
+    - python >=3.10
+    - numpy >=2
+    - scipy
+    - librosa
+
+test:
+  imports:
+    - rin
+
+about:
+  home: https://github.com/iamycy/rin
+  license: MIT
+  license_file: LICENSE
+  summary: Relative Interval Network (RIN) pitch smoothing
+
+extra:
+  recipe-maintainers:
+    - yoyolicoris
