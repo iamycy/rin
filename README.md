@@ -57,12 +57,14 @@ three cores.
 Three core functions:
 
 - `rin.vqt_diff_calculator(x, sr, hop_length, hops=(1,), ...)` -- multi-hop
-  relative pitch differences (cents) with confidences. Extra VQT options
-  (`max_diff_cents`, `bins_per_octave`, `weighting`, `corr_mode`, ...) are
-  plain kwargs -- pass your own.
+  relative pitch differences (cents) with confidences. Uses the paper's
+  fixed estimation path: Pearson (mean-subtracted) normalized
+  cross-correlation of VQT magnitude slices with the arcsin x peak2mean
+  confidence weighting. `max_diff_cents`, `bins_per_octave`, and other VQT
+  options are plain kwargs -- pass your own.
 - `rin.lp_smoother(abs_estimates, abs_confidences, rel_edges, rel_estimates,
-  rel_confidences, dual_form=True)` -- network-flow LP fusion; inputs and
-  output in cents.
+  rel_confidences)` -- network-flow LP fusion (dual min-cost circulation,
+  HiGHS); inputs and output in cents.
 - `rin.estimate_voicing(abs_confidences, rel_edges, rel_confidences)` --
   per-frame voicing probabilities from the two confidence streams.
 

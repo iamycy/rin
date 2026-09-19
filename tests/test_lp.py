@@ -22,14 +22,10 @@ def _rmse(a, b):
     return float(np.sqrt(np.mean((a - b) ** 2)))
 
 
-def test_dual_and_primal_agree():
+def test_smoothing_is_deterministic():
     truth_c, abs_est, abs_conf, edges, rel_est, rel_conf = _synth()
     args = (abs_est, abs_conf, edges, rel_est, rel_conf)
-    sm_dual = lp_smoother(*args, dual_form=True)
-    sm_primal = lp_smoother(*args, dual_form=False)
-    # Same LP, two formulations: agreement is limited by HiGHS numerics.
-    # ~7.5 cents max deviation on a ~9200-cent scale (0.08%) was observed.
-    np.testing.assert_allclose(sm_dual, sm_primal, rtol=1e-3, atol=5.0)
+    np.testing.assert_allclose(lp_smoother(*args), lp_smoother(*args), rtol=1e-12)
 
 
 def test_smoothing_beats_noisy_input():

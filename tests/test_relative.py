@@ -40,13 +40,3 @@ def test_chirp_diff_tracks_instantaneous_change():
     lo, hi = 5, len(est) - 5
     err = np.abs(est[lo:hi] - expected[edges[lo:hi, 0]])
     assert np.median(err) < 15.0  # cents
-
-
-def test_unknown_weighting_fails_fast():
-    x = _sine(dur=0.2)
-    try:
-        vqt_diff_calculator(x, SR, HOP, (1,), weighting="nonsense")
-    except ValueError:
-        pass
-    else:
-        raise AssertionError("expected ValueError for unknown weighting")

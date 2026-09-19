@@ -6,15 +6,11 @@ weighted L1 fusion problem
 
     min_f  sum_n w_n |f[n] - a[n]| + sum_{(u,v) in E} w_{uv} |f[v] - f[u] - d_{uv}|
 
-as a linear program. Two equivalent formulations are available:
-
-* ``dual_form=True`` (default): the Lagrangian dual, a min-cost network
-  circulation problem on a graph with one auxiliary ground node. The optimal
-  primal contour is read off as the Lagrange multipliers (node potentials) of
-  the flow-conservation constraints, so only one (smaller) LP is solved.
-* ``dual_form=False``: the primal with positive/negative slack variables.
-
-Both are solved with the HiGHS simplex solver bundled with SciPy.
+as a linear program. The Lagrangian dual is solved: a min-cost network
+circulation problem on a graph with one auxiliary ground node. The optimal
+primal contour is read off as the Lagrange multipliers (node potentials) of
+the flow-conservation constraints, so only one (smaller) LP is solved, with
+the HiGHS simplex solver bundled with SciPy.
 """
 
 import numpy as np
@@ -101,7 +97,6 @@ def lp_smoother(
     rel_edges: np.ndarray,
     rel_estimates: np.ndarray,
     rel_confidences: np.ndarray,
-    dual_form: bool = True,
 ) -> np.ndarray:
     """Smooth absolute pitch estimates with relative pitch constraints.
 
@@ -112,8 +107,6 @@ def lp_smoother(
         rel_estimates: (E,) pitch difference f[v] - f[u] per edge, in cents.
         rel_confidences: (E,) confidence/weight of each relative estimate.
             Zero-weight edges are dropped (they cannot bind the optimum).
-        dual_form: solve the dual network-circulation LP (default) instead of
-            the primal slack-variable LP. Both give the same optimum.
 
     Returns:
         smooth_pitch: (M,) smoothed pitch contour, in cents.
@@ -167,97 +160,37 @@ def lp_smoother(
     abs_conf_lp = np.maximum(abs_confidences, 1e-6)
     E = len(rel_estimates)
 
-    if dual_form:
-        # Dual network flow formulation (equivalent to circulation network simplex):
-        # Solves the Lagrangian dual on an augmented graph with an auxiliary ground
-        # node (g). B is the M x (M+E) node-arc incidence matrix (flow conservation
-        # at each frame node).
-        # - Arcs 0..M-1 connect ground node -> node i (carrying observed absolute pitch).
-        # - Arcs M..M+E-1 connect node u -> node v (carrying relative pitch differences).
-        # By LP strong duality, the Lagrange multipliers of the node conservation
-        # constraints B y = 0 (-res.eqlin.marginals) are the optimal node potentials (f).
-        num_arcs = M + E
-        all_deltas = np.concatenate([abs_estimates, rel_estimates])
-        all_weights = np.concatenate([abs_conf_lp, rel_confidences])
+    # Dual network flow formulation (equivalent to circulation network simplex):
+    # Solves the Lagrangian dual on an augmented graph with an auxiliary ground
+    # node (g). B is the M x (M+E) node-arc incidence matrix (flow conservation
+    # at each frame node).
+    # - Arcs 0..M-1 connect ground node -> node i (carrying observed absolute pitch).
+    # - Arcs M..M+E-1 connect node u -> node v (carrying relative pitch differences).
+    # By LP strong duality, the Lagrange multipliers of the node conservation
+    # constraints B y = 0 (-res.eqlin.marginals) are the optimal node potentials (f).
+    num_arcs = M + E
+    all_deltas = np.concatenate([abs_estimates, rel_estimates])
+    all_weights = np.concatenate([abs_conf_lp, rel_confidences])
 
-        if E > 0:
-            rel_cols = np.arange(M, num_arcs)
-            rows = np.concatenate([np.arange(M), rel_edges[:, 0], rel_edges[:, 1]])
-            cols = np.concatenate([np.arange(M), rel_cols, rel_cols])
-            data = np.concatenate([np.ones(M), -np.ones(E), np.ones(E)])
-        else:
-            rows = np.arange(M)
-            cols = np.arange(M)
-            data = np.ones(M)
-
-        B = csr_matrix((data, (rows, cols)), shape=(M, num_arcs))
-        bounds = list(zip(-all_weights, all_weights))
-        res = linprog(
-            c=-all_deltas,
-            A_eq=B,
-            b_eq=np.zeros(M),
-            bounds=bounds,
-            method="highs",
-        )
-        if not res.success:
-            raise ValueError("LP smoothing failed: " + res.message)
-        smooth_pitch = -res.eqlin.marginals
+    if E > 0:
+        rel_cols = np.arange(M, num_arcs)
+        rows = np.concatenate([np.arange(M), rel_edges[:, 0], rel_edges[:, 1]])
+        cols = np.concatenate([np.arange(M), rel_cols, rel_cols])
+        data = np.concatenate([np.ones(M), -np.ones(E), np.ones(E)])
     else:
-        # Primal formulation with positive/negative slack variables e_a+, e_a-, e_r+, e_r-:
-        # Variables: [f, e_a+, e_a-, e_r+, e_r-] of total dimension 3*M + 2*E.
-        tmp = [
-            (np.ones(M), np.arange(M), np.arange(M)),
-            (np.ones(M), np.arange(M), np.arange(M) + M),
-            (-np.ones(M), np.arange(M), np.arange(M) + M * 2),
-        ]
-        row_offset = M
-        col_offset = M * 3
-        tmp += [
-            (
-                -np.ones(E),
-                np.arange(E) + row_offset,
-                rel_edges[:, 0],
-            ),
-            (
-                np.ones(E),
-                np.arange(E) + row_offset,
-                rel_edges[:, 1],
-            ),
-            (
-                np.ones(E),
-                np.arange(E) + row_offset,
-                np.arange(E) + col_offset,
-            ),
-            (
-                -np.ones(E),
-                np.arange(E) + row_offset,
-                np.arange(E) + col_offset + E,
-            ),
-        ]
+        rows = np.arange(M)
+        cols = np.arange(M)
+        data = np.ones(M)
 
-        vals, rows, cols = [np.concatenate(x) for x in zip(*tmp)]
-        weights = np.concatenate(
-            [
-                np.zeros_like(abs_estimates),
-                abs_conf_lp,
-                abs_conf_lp,
-                rel_confidences,
-                rel_confidences,
-            ]
-        )
-        b_eq = np.concatenate([abs_estimates, rel_estimates])
-        A_eq = csr_matrix((vals, (rows, cols)), shape=(b_eq.size, col_offset + E * 2))
-        n_slack = 2 * (M + E)
-        bounds = [(None, None)] * M + [(0, None)] * n_slack
-        res = linprog(
-            c=weights,
-            A_eq=A_eq,
-            b_eq=b_eq,
-            bounds=bounds,
-            method="highs",
-        )
-        if not res.success:
-            raise ValueError("LP smoothing failed: " + res.message)
-        smooth_pitch = res.x[:M]
-
-    return smooth_pitch
+    B = csr_matrix((data, (rows, cols)), shape=(M, num_arcs))
+    bounds = list(zip(-all_weights, all_weights))
+    res = linprog(
+        c=-all_deltas,
+        A_eq=B,
+        b_eq=np.zeros(M),
+        bounds=bounds,
+        method="highs",
+    )
+    if not res.success:
+        raise ValueError("LP smoothing failed: " + res.message)
+    return -res.eqlin.marginals
