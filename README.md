@@ -76,8 +76,10 @@ One high-level function plus three cores:
 - `rin.smooth_pitch(x, f0, strength, sr, hop_length, hops=(1, 2, 3, 5), ...)`
   -- the paper's pipeline in one call: VQT relative diffs, dual LP fusion,
   and voicing. `f0` in cents with NaN = unvoiced; returns `(f0_smooth,
-  voicing)` in cents. Extra kwargs (`max_diff_cents`, `bins_per_octave`,
-  `n_bins`, ...) go to the estimator.
+  voicing)` in cents. Each stage is swappable via `difference_estimator`,
+  `solver`, and `voicing_estimator` keyword arguments (any callable
+  obeying the `rin.interfaces` contracts). Extra kwargs (`max_diff_cents`,
+  `bins_per_octave`, `n_bins`, ...) go to the estimator.
 
 Three core functions (for custom wiring):
 
@@ -98,9 +100,10 @@ Three core functions (for custom wiring):
 
 Each core is a plain function obeying a contract in `rin.interfaces`
 (`DifferenceEstimator`, `Solver`, and `VoicingEstimator` are `Callable`
-type aliases). Implement your own function with the same signature and call
-it instead -- no classes or inheritance needed; any callable (function,
-lambda, `functools.partial`, callable object) works:
+type aliases). Implement your own function with the same signature and
+pass it to `smooth_pitch` -- or call it directly in your own wiring. No
+classes or inheritance needed; any callable (function, lambda,
+`functools.partial`, callable object) works:
 
 ```python
 def my_estimator(x, sr, hop_length, hops):
@@ -115,6 +118,15 @@ def my_voicing(abs_confidences, rel_edges, rel_confidences):
     # -> voicing (M,) in [0,1]
     ...
 
+# One call, custom stages:
+f0_smooth, voicing = smooth_pitch(
+    x, f0, strength, sr, hop_length,
+    difference_estimator=my_estimator,
+    solver=my_solver,
+    voicing_estimator=my_voicing,
+)
+
+# ...or wire them by hand:
 edges, estimates, confidences = my_estimator(x, sr, hop_length, hops=(1, 2, 3, 5))
 smooth_cents = my_solver(f0_cents, abs_conf, edges, estimates, confidences)
 voicing = my_voicing(abs_conf, edges, confidences)

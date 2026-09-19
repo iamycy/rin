@@ -1,6 +1,7 @@
 """High-level RIN pipeline: the paper's version in one call.
 
-Chains the three core functions with the paper's fixed settings:
+Chains three stages -- a difference estimator, a solver, and a voicing
+estimator -- with the paper's fixed settings by default:
 
 1. :func:`rin.relative.vqt_diff_calculator` -- Pearson normalized
    cross-correlation of VQT magnitude slices, arcsin x peak2mean confidence
@@ -8,8 +9,11 @@ Chains the three core functions with the paper's fixed settings:
 2. :func:`rin.lp.lp_smoother` -- dual min-cost circulation LP fusion.
 3. :func:`rin.lp.estimate_voicing` -- distance-weighted RMS voicing fusion.
 
-For custom behavior, call the three cores directly instead (see
-:mod:`rin.interfaces` for the contracts).
+Each stage is an injectable callable obeying the contracts in
+:mod:`rin.interfaces` (any function, lambda, ``functools.partial``, or
+callable object works), so :func:`smooth_pitch` doubles as a swappable
+pipeline: pass your own implementations to replace any stage while keeping
+the one-call convenience.
 
 The package never converts pitch units: absolute and relative estimates
 must share one pitch domain (the built-in estimator outputs cents), and
@@ -21,6 +25,7 @@ from collections.abc import Sequence
 
 import numpy as np
 
+from .interfaces import DifferenceEstimator, Solver, VoicingEstimator
 from .lp import estimate_voicing, lp_smoother
 from .relative import vqt_diff_calculator
 
@@ -35,9 +40,16 @@ def smooth_pitch(
     sr: int,
     hop_length: int,
     hops: Sequence[int] = HOPS,
-    **vqt_kwargs,
+    difference_estimator: DifferenceEstimator = vqt_diff_calculator,
+    solver: Solver = lp_smoother,
+    voicing_estimator: VoicingEstimator = estimate_voicing,
+    **estimator_kwargs,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Smooth absolute pitch estimates with RIN, as reported in the paper.
+
+    Chains a difference estimator, a solver, and a voicing estimator in
+    one call. The defaults reproduce the paper; pass your own callables
+    (obeying the contracts in :mod:`rin.interfaces`) to swap any stage.
 
     Parameters
     ----------
@@ -50,13 +62,24 @@ def smooth_pitch(
     sr : int
         Sample rate in Hz.
     hop_length : int
-        Hop length in samples (shared by the VQT and ``f0``).
+        Hop length in samples (shared by the estimator and ``f0``).
     hops : sequence of int
         Hop differences for the relative estimator.
-    **vqt_kwargs
-        Extra keyword arguments forwarded to
-        :func:`rin.relative.vqt_diff_calculator` (e.g. ``max_diff_cents``,
-        ``bins_per_octave``, ``n_bins``).
+    difference_estimator : DifferenceEstimator, optional
+        ``(x, sr, hop_length, hops, **estimator_kwargs) -> (edges,
+        estimates, confidences)``. Defaults to
+        :func:`rin.relative.vqt_diff_calculator`.
+    solver : Solver, optional
+        ``(abs_estimates, abs_confidences, rel_edges, rel_estimates,
+        rel_confidences) -> smooth_pitch``. Defaults to
+        :func:`rin.lp.lp_smoother`.
+    voicing_estimator : VoicingEstimator, optional
+        ``(abs_confidences, rel_edges, rel_confidences) -> voicing``.
+        Defaults to :func:`rin.lp.estimate_voicing`.
+    **estimator_kwargs
+        Extra keyword arguments forwarded to ``difference_estimator``
+        (e.g. ``max_diff_cents``, ``bins_per_octave``, ``n_bins`` for the
+        built-in VQT estimator).
 
     Returns
     -------
@@ -76,7 +99,9 @@ def smooth_pitch(
     if f0.ndim != 1 or strength.shape != f0.shape:
         raise ValueError("f0 and strength must be 1-D arrays of the same length")
 
-    edges, estimates, confidences = vqt_diff_calculator(x, sr, hop_length, hops=hops, **vqt_kwargs)
+    edges, estimates, confidences = difference_estimator(
+        x, sr, hop_length, hops, **estimator_kwargs
+    )
     # The tracker frames must line up 1:1 with the estimator's frames;
     # out-of-range edges would otherwise be silently dropped downstream.
     # (With fewer than two frames there are no edges; fall back to the VQT
@@ -94,6 +119,6 @@ def smooth_pitch(
     abs_est = np.where(voiced, f0, 0.0)
     abs_conf = np.where(voiced, strength, 0.0)
 
-    f0_smooth = lp_smoother(abs_est, abs_conf, edges, estimates, confidences)
-    voicing = estimate_voicing(abs_conf, edges, confidences)
+    f0_smooth = solver(abs_est, abs_conf, edges, estimates, confidences)
+    voicing = voicing_estimator(abs_conf, edges, confidences)
     return f0_smooth, voicing

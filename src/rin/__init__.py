@@ -8,7 +8,8 @@ Three core functions, arrays in / arrays out:
 - :func:`estimate_voicing`: per-frame voicing from absolute and relative
   confidences.
 
-:func:`smooth_pitch` chains the three with the paper's fixed settings.
+:func:`smooth_pitch` chains the three with the paper's fixed settings; each
+stage is an injectable callable, so it doubles as a swappable pipeline.
 Each core is a plain function obeying the contracts in :mod:`rin.interfaces`.
 Bring your own implementations with the same signatures and wire them
 however you like -- this package does no file loading and no caching.
