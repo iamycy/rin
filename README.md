@@ -25,12 +25,23 @@ pip install rin-pitch
 
 ```python
 import numpy as np
-from rin import estimate_voicing, lp_smoother, vqt_diff_calculator
+from rin import smooth_pitch
 
 # x: mono waveform, sr: sample rate
 # f0: (M,) absolute pitch in Hz on a 20 ms grid, NaN = unvoiced
 # strength: (M,) voicing confidence in [0, 1]
 hop_length = int(0.02 * sr)
+
+# the paper's pipeline in one call: VQT relative diffs -> dual LP fusion
+# -> voicing, with the paper's fixed settings (hops 1,2,3,5; Pearson xcorr;
+# arcsin x peak2mean weighting)
+f0_smooth, voicing = smooth_pitch(x, f0, strength, sr, hop_length)
+```
+
+For custom behavior, wire the three cores yourself:
+
+```python
+from rin import vqt_diff_calculator, lp_smoother, estimate_voicing
 
 # 1. relative pitch differences between frames (cents), with confidences
 edges, estimates, confidences = vqt_diff_calculator(x, sr, hop_length, hops=(1, 2, 3, 5))
@@ -54,7 +65,15 @@ three cores.
 
 ## API
 
-Three core functions:
+One high-level function plus three cores:
+
+- `rin.smooth_pitch(x, f0_hz, strength, sr, hop_length, hops=(1, 2, 3, 5), ...)`
+  -- the paper's pipeline in one call: VQT relative diffs, dual LP fusion,
+  and voicing. `f0_hz` in Hz with NaN = unvoiced; returns `(f0_smooth_hz,
+  voicing)`. Extra kwargs (`max_diff_cents`, `bins_per_octave`, `n_bins`,
+  ...) go to the estimator.
+
+Three core functions (for custom wiring):
 
 - `rin.vqt_diff_calculator(x, sr, hop_length, hops=(1,), ...)` -- multi-hop
   relative pitch differences (cents) with confidences. Uses the paper's
