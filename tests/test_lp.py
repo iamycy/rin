@@ -22,6 +22,70 @@ def _rmse(a, b):
     return float(np.sqrt(np.mean((a - b) ** 2)))
 
 
+def _primal_smoother(abs_estimates, abs_confidences, rel_edges, rel_estimates, rel_confidences):
+    """Explicit primal LP (|.| split into slacks) as a reference for the dual."""
+    from scipy.optimize import linprog
+
+    abs_estimates = np.asarray(abs_estimates, dtype=float)
+    abs_confidences = np.asarray(abs_confidences, dtype=float)
+    rel_edges = np.asarray(rel_edges, dtype=int)
+    rel_estimates = np.asarray(rel_estimates, dtype=float)
+    rel_confidences = np.asarray(rel_confidences, dtype=float)
+    M = abs_estimates.shape[0]
+    E = rel_edges.shape[0]
+    B = np.zeros((E, M))
+    rows = np.arange(E)
+    # np.add.at: duplicate (row, col) pairs accumulate, so self-loops
+    # correctly produce an all-zero row (as in the package's csr_matrix).
+    np.add.at(B, (rows, rel_edges[:, 0]), -1.0)
+    np.add.at(B, (rows, rel_edges[:, 1]), 1.0)
+    I_M, I_E = np.eye(M), np.eye(E)
+    Z_ME, Z_EM = np.zeros((M, E)), np.zeros((E, M))
+    # x = [sA (M), sR (E), f (M)]; constraints: +/-(f - a) <= sA, +/-(Bf - r) <= sR
+    A_ub = np.block(
+        [
+            [-I_M, Z_ME, I_M],
+            [-I_M, Z_ME, -I_M],
+            [Z_EM, -I_E, B],
+            [Z_EM, -I_E, -B],
+        ]
+    )
+    b_ub = np.concatenate([abs_estimates, -abs_estimates, rel_estimates, -rel_estimates])
+    c = np.concatenate([abs_confidences, rel_confidences, np.zeros(M)])
+    bounds = [(0, None)] * (M + E) + [(None, None)] * M
+    res = linprog(c, A_ub=A_ub, b_ub=b_ub, bounds=bounds, method="highs")
+    assert res.success, res.message
+    return res.x[M + E :]
+
+
+def test_dual_matches_primal():
+    """The dual min-cost flow must equal the explicit primal LP optimum,
+    including adversarial graphs with backward edges, self-loops, and
+    duplicate edges."""
+    rng = np.random.default_rng(11)
+    for _ in range(5):
+        M = int(rng.integers(4, 10))
+        abs_est = rng.normal(6900.0, 50.0, M)
+        abs_conf = rng.uniform(0.1, 1.0, M)
+        E = int(rng.integers(0, 2 * M))
+        edges = (
+            np.stack([rng.integers(0, M, E), rng.integers(0, M, E)], axis=1)
+            if E
+            else np.zeros((0, 2), dtype=int)
+        )
+        rel_est = rng.normal(0.0, 30.0, E)
+        rel_conf = rng.uniform(0.1, 1.0, E)
+        dual = lp_smoother(abs_est, abs_conf, edges, rel_est, rel_conf)
+        primal = _primal_smoother(abs_est, abs_conf, edges, rel_est, rel_conf)
+        np.testing.assert_allclose(dual, primal, rtol=1e-6, atol=1e-6)
+
+
+def test_malformed_empty_edges_rejected():
+    _, abs_est, abs_conf, _, _, _ = _synth()
+    with pytest.raises(ValueError, match="rel_edges"):
+        lp_smoother(abs_est, abs_conf, np.zeros((0, 3)), np.zeros(0), np.zeros(0))
+
+
 def test_smoothing_is_deterministic():
     truth_c, abs_est, abs_conf, edges, rel_est, rel_conf = _synth()
     args = (abs_est, abs_conf, edges, rel_est, rel_conf)

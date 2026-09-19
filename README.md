@@ -5,7 +5,7 @@ estimates (from any F0 tracker) with multi-hop relative pitch differences
 estimated from a magnitude VQT, through a network-flow linear program.
 
 This is the reference implementation accompanying the paper
-"Better than Viterbi: ..." (ICASSP 2027).
+"Pitch Smoothing Using Relative Interval Networks" (ICASSP 2027).
 
 ## Install
 

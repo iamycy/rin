@@ -72,3 +72,22 @@ def test_invalid_inputs_fail_fast():
         vqt_diff_calculator(x, SR, HOP, (0,))  # non-positive hop
     with pytest.raises(ValueError):
         vqt_diff_calculator(x, SR, HOP, (1.5,))  # non-integer hop
+    with pytest.raises(ValueError, match="bins_per_octave"):
+        vqt_diff_calculator(x, SR, HOP, (1,), bins_per_octave=0)
+    with pytest.raises(ValueError, match="bins_per_octave"):
+        vqt_diff_calculator(x, SR, HOP, (1,), bins_per_octave=-12)
+    with pytest.raises(ValueError, match="max_diff_cents"):
+        vqt_diff_calculator(x, SR, HOP, (1,), max_diff_cents=0.0)
+    with pytest.raises(ValueError, match="max_diff_cents"):
+        vqt_diff_calculator(x, SR, HOP, (1,), max_diff_cents=-100.0)
+    with pytest.raises(ValueError, match="max_diff_cents"):
+        vqt_diff_calculator(x, SR, HOP, (1,), max_diff_cents=10.0)  # < 1 bin
+
+
+def test_hop_diff_rejects_nonpositive_jump():
+    x = _sine(dur=0.5)
+    V = compute_vqt(x, SR, HOP)
+    with pytest.raises(ValueError, match="jump"):
+        hop_diff(V, 0, 18, 1200 / 36)
+    with pytest.raises(ValueError, match="jump"):
+        hop_diff(V, 1.5, 18, 1200 / 36)

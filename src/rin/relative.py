@@ -99,7 +99,16 @@ def hop_diff(
 
     Returns ``(edges, estimates, confidences)`` for this hop. ``edges`` are
     frame-index pairs, ``estimates`` are in cents.
+
+    Raises:
+        ValueError: if ``jump`` is not a positive integer.
     """
+    try:
+        jump = _index(jump)
+    except TypeError:
+        raise ValueError("jump must be an integer") from None
+    if jump < 1:
+        raise ValueError("jump must be positive")
     if setup is None:
         setup = _vqt_xcorr_setup(V, max_diff_bins)
     sliding_V, sliding_V_norm, window_sum, K_tau = setup
@@ -168,8 +177,10 @@ def vqt_diff_calculator(
         confidences (*,): confidence for each pitch difference.
 
     Raises:
-        ValueError: if ``x`` is not a mono (1-D) waveform, or ``hops`` is
-            empty or contains non-positive values.
+        ValueError: if ``x`` is not a mono (1-D) waveform, ``hops`` is
+            empty or contains non-positive values, ``bins_per_octave``
+            is not positive, or ``max_diff_cents`` allows less than
+            one VQT bin of search.
     """
     x = np.asarray(x, dtype=float)
     if x.ndim != 1:
@@ -182,11 +193,15 @@ def vqt_diff_calculator(
         raise ValueError("hops must be non-empty")
     if any(h <= 0 for h in hops):
         raise ValueError("hops must be positive integers")
+    if bins_per_octave <= 0:
+        raise ValueError("bins_per_octave must be positive")
 
     V = compute_vqt(x, sr, hop_length, bins_per_octave=bins_per_octave, **vqt_kwargs)
 
     diff_unit = 1200 / bins_per_octave
     max_diff_bins = int(max_diff_cents / diff_unit)
+    if max_diff_bins < 1:
+        raise ValueError("max_diff_cents must allow at least one VQT bin of search")
 
     setup = _vqt_xcorr_setup(V, max_diff_bins)
 

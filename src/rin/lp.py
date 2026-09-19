@@ -41,6 +41,8 @@ def _validate_edge_inputs(
     rel_confidences = np.asarray(rel_confidences, dtype=float)
     rel_edges = np.asarray(rel_edges)
     if rel_edges.size == 0:
+        if rel_edges.ndim > 2 or (rel_edges.ndim == 2 and rel_edges.shape[1] not in (0, 2)):
+            raise ValueError("expected rel_edges of shape (E, 2)")
         rel_edges = np.zeros((0, 2), dtype=int)
     if abs_confidences.ndim != 1 or rel_edges.ndim != 2 or rel_edges.shape[1] != 2:
         raise ValueError("expected abs_confidences 1-D of length M and rel_edges of shape (E, 2)")
