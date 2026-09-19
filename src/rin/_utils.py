@@ -3,14 +3,6 @@
 import numpy as np
 
 
-def hz2cent(f):
-    return 1200 * np.log2(f)
-
-
-def cent2hz(c):
-    return 2 ** (c / 1200)
-
-
 def parabolic_interpolation(a, b, c):
     # Parabola through three stencil values; return the interpolated value
     # and the offset from the center bin. Kept local on purpose: librosa's

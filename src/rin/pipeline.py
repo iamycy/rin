@@ -10,13 +10,17 @@ Chains the three core functions with the paper's fixed settings:
 
 For custom behavior, call the three cores directly instead (see
 :mod:`rin.interfaces` for the contracts).
+
+The package never converts pitch units: absolute and relative estimates
+must share one pitch domain (the built-in estimator outputs cents), and
+converting to or from the caller's own domain (Hz, MIDI, ...) is the
+caller's responsibility.
 """
 
 from collections.abc import Sequence
 
 import numpy as np
 
-from ._utils import cent2hz, hz2cent
 from .lp import estimate_voicing, lp_smoother
 from .relative import vqt_diff_calculator
 
@@ -26,40 +30,39 @@ HOPS = (1, 2, 3, 5)
 
 def smooth_pitch(
     x: np.ndarray,
-    f0_hz: np.ndarray,
+    f0: np.ndarray,
     strength: np.ndarray,
     sr: int,
     hop_length: int,
     hops: Sequence[int] = HOPS,
     **vqt_kwargs,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Smooth a tracker's F0 with RIN, exactly as reported in the paper.
+    """Smooth absolute pitch estimates with RIN, as reported in the paper.
 
     Args:
         x: mono input audio signal.
-        f0_hz: (M,) absolute pitch in Hz on the ``hop_length`` grid;
-            NaN marks unvoiced frames.
+        f0: (M,) absolute pitch per frame, in cents; NaN (or inf) marks
+            unvoiced frames.
         strength: (M,) tracker voicing confidence in [0, 1].
         sr: sample rate in Hz.
-        hop_length: hop length in samples (shared by the VQT and ``f0_hz``).
+        hop_length: hop length in samples (shared by the VQT and ``f0``).
         hops: hop differences for the relative estimator.
         vqt_kwargs: extra keyword arguments forwarded to
             :func:`rin.relative.vqt_diff_calculator` (e.g. ``max_diff_cents``,
             ``bins_per_octave``, ``n_bins``).
 
     Returns:
-        f0_smooth_hz: (M,) smoothed pitch in Hz.
+        f0_smooth: (M,) smoothed pitch, in cents.
         voicing: (M,) voicing probabilities in [0, 1].
 
     Raises:
-        ValueError: if ``f0_hz``/``strength`` are not 1-D of equal length,
-            their length does not match the estimator's frame count, or a
-            voiced frame has non-positive ``f0_hz``.
+        ValueError: if ``f0``/``strength`` are not 1-D of equal length,
+            or their length does not match the estimator's frame count.
     """
-    f0_hz = np.asarray(f0_hz, dtype=float)
+    f0 = np.asarray(f0, dtype=float)
     strength = np.asarray(strength, dtype=float)
-    if f0_hz.ndim != 1 or strength.shape != f0_hz.shape:
-        raise ValueError("f0_hz and strength must be 1-D arrays of the same length")
+    if f0.ndim != 1 or strength.shape != f0.shape:
+        raise ValueError("f0 and strength must be 1-D arrays of the same length")
 
     edges, estimates, confidences = vqt_diff_calculator(x, sr, hop_length, hops=hops, **vqt_kwargs)
     # The tracker frames must line up 1:1 with the estimator's frames;
@@ -67,20 +70,18 @@ def smooth_pitch(
     # (With fewer than two frames there are no edges; fall back to the VQT
     # frame count directly.)
     n_frames = int(edges.max()) + 1 if edges.size else 1 + len(x) // hop_length
-    if len(f0_hz) != n_frames:
+    if len(f0) != n_frames:
         raise ValueError(
-            f"f0_hz has {len(f0_hz)} frames but the estimator produced "
+            f"f0 has {len(f0)} frames but the estimator produced "
             f"{n_frames}; both must use the same hop_length grid"
         )
 
-    # Unvoiced (NaN) frames get zero absolute confidence, so the LP bridges
-    # them through the relative edges alone.
-    voiced = np.isfinite(f0_hz)
-    if not bool((f0_hz[voiced] > 0).all()):
-        raise ValueError("f0_hz must be positive on voiced (finite) frames")
-    f0_cents = hz2cent(np.where(voiced, f0_hz, 1.0))
+    # Unvoiced (non-finite) frames get zero absolute confidence, so the LP
+    # bridges them through the relative edges alone.
+    voiced = np.isfinite(f0)
+    abs_est = np.where(voiced, f0, 0.0)
     abs_conf = np.where(voiced, strength, 0.0)
 
-    smooth_cents = lp_smoother(f0_cents, abs_conf, edges, estimates, confidences)
+    f0_smooth = lp_smoother(abs_est, abs_conf, edges, estimates, confidences)
     voicing = estimate_voicing(abs_conf, edges, confidences)
-    return cent2hz(smooth_cents), voicing
+    return f0_smooth, voicing

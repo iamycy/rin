@@ -118,16 +118,20 @@ def lp_smoother(
 ) -> np.ndarray:
     """Smooth absolute pitch estimates with relative pitch constraints.
 
+    The pitch domain is the caller's choice (cents, MIDI, log-frequency,
+    ...): ``abs_estimates`` and ``rel_estimates`` must share it, and the
+    output is in the same domain. This package never converts units.
+
     Args:
-        abs_estimates: (M,) absolute pitch per frame, in cents.
+        abs_estimates: (M,) absolute pitch per frame.
         abs_confidences: (M,) confidence/weight of each absolute estimate.
         rel_edges: (E, 2) frame-index pairs (u, v) for each relative edge.
-        rel_estimates: (E,) pitch difference f[v] - f[u] per edge, in cents.
+        rel_estimates: (E,) pitch difference f[v] - f[u] per edge.
         rel_confidences: (E,) confidence/weight of each relative estimate.
             Zero-weight edges are dropped (they cannot bind the optimum).
 
     Returns:
-        smooth_pitch: (M,) smoothed pitch contour, in cents.
+        smooth_pitch: (M,) smoothed pitch contour.
 
     Raises:
         ValueError: if shapes disagree, values are non-finite, confidences

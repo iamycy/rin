@@ -46,15 +46,18 @@ Solver: TypeAlias = Callable[
 Signature: ``(abs_estimates, abs_confidences, rel_edges, rel_estimates,
 rel_confidences) -> smooth_pitch``.
 
+The pitch domain is the caller's choice -- ``abs_estimates`` and
+``rel_estimates`` must share it, and the output is in the same domain.
+
 Args:
-    abs_estimates: ``(M,)`` absolute pitch per frame, in cents.
+    abs_estimates: ``(M,)`` absolute pitch per frame.
     abs_confidences: ``(M,)`` weights in ``[0, 1]``.
     rel_edges: ``(E, 2)`` integer frame-index pairs.
-    rel_estimates: ``(E,)`` relative pitch differences in cents.
+    rel_estimates: ``(E,)`` relative pitch differences.
     rel_confidences: ``(E,)`` weights in ``[0, 1]``.
 
 Returns:
-    smooth_pitch: ``(M,)`` fused pitch contour, in cents.
+    smooth_pitch: ``(M,)`` fused pitch contour.
 """
 
 VoicingEstimator: TypeAlias = Callable[

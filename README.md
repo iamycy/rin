@@ -28,7 +28,7 @@ import numpy as np
 from rin import smooth_pitch
 
 # x: mono waveform, sr: sample rate
-# f0: (M,) absolute pitch in Hz on a 20 ms grid, NaN = unvoiced
+# f0: (M,) absolute pitch in cents on a 20 ms grid, NaN = unvoiced
 # strength: (M,) voicing confidence in [0, 1]
 hop_length = int(0.02 * sr)
 
@@ -38,6 +38,11 @@ hop_length = int(0.02 * sr)
 f0_smooth, voicing = smooth_pitch(x, f0, strength, sr, hop_length)
 ```
 
+The package never converts pitch units: absolute and relative estimates
+must share one pitch domain (the built-in estimator outputs cents), and
+converting to or from your own domain (Hz, MIDI, ...) is your
+responsibility.
+
 For custom behavior, wire the three cores yourself:
 
 ```python
@@ -46,17 +51,18 @@ from rin import vqt_diff_calculator, lp_smoother, estimate_voicing
 # 1. relative pitch differences between frames (cents), with confidences
 edges, estimates, confidences = vqt_diff_calculator(x, sr, hop_length, hops=(1, 2, 3, 5))
 
-# 2. fuse with the absolute estimates through the network-flow LP (cents in/out).
+# 2. fuse with the absolute estimates through the network-flow LP.
+#    Both must be in the same domain -- here cents, matching the estimator.
+#    E.g. from a Hz tracker (your conversion, your responsibility):
+voiced = np.isfinite(f0_hz)
+f0_cents = 1200 * np.log2(np.where(voiced, f0_hz, 1.0))
 #    Unvoiced (NaN) frames get zero absolute confidence, so the LP bridges
 #    them through the relative edges alone.
-voiced = np.isfinite(f0)
-f0_cents = 1200 * np.log2(np.where(voiced, f0, 1.0))
 abs_conf = np.where(voiced, strength, 0.0)
 smooth_cents = lp_smoother(f0_cents, abs_conf, edges, estimates, confidences)
 
 # 3. per-frame voicing from the absolute and relative confidences
 voicing = estimate_voicing(abs_conf, edges, confidences)
-f0_smooth = 2 ** (smooth_cents / 1200)
 ```
 
 Arrays in, arrays out -- the package does no file loading and no caching.
@@ -67,11 +73,11 @@ three cores.
 
 One high-level function plus three cores:
 
-- `rin.smooth_pitch(x, f0_hz, strength, sr, hop_length, hops=(1, 2, 3, 5), ...)`
+- `rin.smooth_pitch(x, f0, strength, sr, hop_length, hops=(1, 2, 3, 5), ...)`
   -- the paper's pipeline in one call: VQT relative diffs, dual LP fusion,
-  and voicing. `f0_hz` in Hz with NaN = unvoiced; returns `(f0_smooth_hz,
-  voicing)`. Extra kwargs (`max_diff_cents`, `bins_per_octave`, `n_bins`,
-  ...) go to the estimator.
+  and voicing. `f0` in cents with NaN = unvoiced; returns `(f0_smooth,
+  voicing)` in cents. Extra kwargs (`max_diff_cents`, `bins_per_octave`,
+  `n_bins`, ...) go to the estimator.
 
 Three core functions (for custom wiring):
 
@@ -83,7 +89,8 @@ Three core functions (for custom wiring):
   `n_bins` (252), and other VQT options are plain kwargs -- pass your own.
 - `rin.lp_smoother(abs_estimates, abs_confidences, rel_edges, rel_estimates,
   rel_confidences)` -- network-flow LP fusion (dual min-cost circulation,
-  HiGHS); inputs and output in cents.
+  HiGHS); absolute and relative estimates must share one pitch domain
+  (caller's choice, e.g. cents).
 - `rin.estimate_voicing(abs_confidences, rel_edges, rel_confidences)` --
   per-frame voicing probabilities from the two confidence streams.
 
