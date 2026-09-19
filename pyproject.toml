@@ -9,7 +9,7 @@ description = "Relative Interval Network (RIN) pitch smoothing: fuse absolute F0
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
-authors = [{ name = "Chin-Yun Yu" }]
+authors = [{ name = "Chin-Yun Yu" }, { name = "Chi-Jen Peng" }]
 keywords = ["pitch-tracking", "f0-estimation", "vqt", "network-flow", "audio"]
 classifiers = [
     "Development Status :: 3 - Alpha",
