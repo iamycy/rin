@@ -78,8 +78,9 @@ One high-level function plus three cores:
   and voicing. `f0` in cents with NaN = unvoiced; returns `(f0_smooth,
   voicing)` in cents. Each stage is swappable via `difference_estimator`,
   `solver`, and `voicing_estimator` keyword arguments (any callable
-  obeying the `rin.interfaces` contracts). Extra kwargs (`max_diff_cents`,
-  `bins_per_octave`, `n_bins`, ...) go to the estimator.
+  obeying the `rin.interfaces` contracts); configure a stage with
+  `functools.partial`, e.g. `difference_estimator=partial(
+  vqt_diff_calculator, max_diff_cents=500.0)`.
 
 Three core functions (for custom wiring):
 
@@ -106,6 +107,8 @@ classes or inheritance needed; any callable (function, lambda,
 `functools.partial`, callable object) works:
 
 ```python
+from functools import partial
+
 def my_estimator(x, sr, hop_length, hops):
     # -> (edges (E,2) int, estimates (E,) cents, confidences (E,) in [0,1])
     ...
@@ -118,10 +121,10 @@ def my_voicing(abs_confidences, rel_edges, rel_confidences):
     # -> voicing (M,) in [0,1]
     ...
 
-# One call, custom stages:
+# One call, custom stages (tune a stage via functools.partial):
 f0_smooth, voicing = smooth_pitch(
     x, f0, strength, sr, hop_length,
-    difference_estimator=my_estimator,
+    difference_estimator=partial(vqt_diff_calculator, max_diff_cents=500.0),
     solver=my_solver,
     voicing_estimator=my_voicing,
 )

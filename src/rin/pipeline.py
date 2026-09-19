@@ -43,13 +43,16 @@ def smooth_pitch(
     difference_estimator: DifferenceEstimator = vqt_diff_calculator,
     solver: Solver = lp_smoother,
     voicing_estimator: VoicingEstimator = estimate_voicing,
-    **estimator_kwargs,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Smooth absolute pitch estimates with RIN, as reported in the paper.
 
     Chains a difference estimator, a solver, and a voicing estimator in
     one call. The defaults reproduce the paper; pass your own callables
     (obeying the contracts in :mod:`rin.interfaces`) to swap any stage.
+    Configure a stage with :func:`functools.partial`, e.g.
+    ``difference_estimator=partial(vqt_diff_calculator,
+    max_diff_cents=500.0)`` -- ``smooth_pitch`` itself takes no
+    stage-specific keyword arguments.
 
     Parameters
     ----------
@@ -66,8 +69,8 @@ def smooth_pitch(
     hops : sequence of int
         Hop differences for the relative estimator.
     difference_estimator : DifferenceEstimator, optional
-        ``(x, sr, hop_length, hops, **estimator_kwargs) -> (edges,
-        estimates, confidences)``. Defaults to
+        Called as ``difference_estimator(x, sr, hop_length, hops)``;
+        returns ``(edges, estimates, confidences)``. Defaults to
         :func:`rin.relative.vqt_diff_calculator`.
     solver : Solver, optional
         ``(abs_estimates, abs_confidences, rel_edges, rel_estimates,
@@ -76,10 +79,6 @@ def smooth_pitch(
     voicing_estimator : VoicingEstimator, optional
         ``(abs_confidences, rel_edges, rel_confidences) -> voicing``.
         Defaults to :func:`rin.lp.estimate_voicing`.
-    **estimator_kwargs
-        Extra keyword arguments forwarded to ``difference_estimator``
-        (e.g. ``max_diff_cents``, ``bins_per_octave``, ``n_bins`` for the
-        built-in VQT estimator).
 
     Returns
     -------
@@ -99,9 +98,7 @@ def smooth_pitch(
     if f0.ndim != 1 or strength.shape != f0.shape:
         raise ValueError("f0 and strength must be 1-D arrays of the same length")
 
-    edges, estimates, confidences = difference_estimator(
-        x, sr, hop_length, hops, **estimator_kwargs
-    )
+    edges, estimates, confidences = difference_estimator(x, sr, hop_length, hops)
     # The tracker frames must line up 1:1 with the estimator's frames;
     # out-of-range edges would otherwise be silently dropped downstream.
     # (With fewer than two frames there are no edges; fall back to the VQT

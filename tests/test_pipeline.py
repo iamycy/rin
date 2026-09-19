@@ -5,6 +5,8 @@ shows the intended custom-wiring pattern -- the package does no caching and
 no file loading, each caller manages their own pipeline around the cores.
 """
 
+from functools import partial
+
 import numpy as np
 import pytest
 
@@ -75,9 +77,11 @@ def test_smooth_pitch_uses_injected_callables():
     x, _, noisy_cents, strength = _noisy_chirp()
     calls = {}
 
-    def recording_estimator(x_, sr_, hop_, hops_, **kw):
-        calls["estimator"] = (tuple(hops_), kw)
-        return vqt_diff_calculator(x_, sr_, hop_, hops_, **kw)
+    estimator = partial(vqt_diff_calculator, max_diff_cents=500.0)
+
+    def recording_estimator(x_, sr_, hop_, hops_):
+        calls["estimator"] = tuple(hops_)
+        return estimator(x_, sr_, hop_, hops_)
 
     def recording_solver(abs_est, abs_conf, edges, estimates, confidences):
         calls["solver"] = (abs_est.shape, edges.shape)
@@ -97,12 +101,10 @@ def test_smooth_pitch_uses_injected_callables():
         difference_estimator=recording_estimator,
         solver=recording_solver,
         voicing_estimator=recording_voicing,
-        max_diff_cents=500.0,
     )
 
     assert set(calls) == {"estimator", "solver", "voicing"}
-    assert calls["estimator"][0] == (1, 2)
-    assert calls["estimator"][1]["max_diff_cents"] == 500.0
+    assert calls["estimator"] == (1, 2)
     n_frames = len(noisy_cents)
     assert calls["solver"][0] == (n_frames,)
     assert calls["voicing"] == (n_frames,)
