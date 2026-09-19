@@ -200,20 +200,20 @@ def vqt_diff_calculator(
     x: np.ndarray,
     sr: int,
     hop_length: int,
-    diff_hops: Sequence[int] = (1,),
+    hops: Sequence[int] = (1,),
     max_diff_cents: float = MAX_DIFF_CENTS,
     bins_per_octave: int = VQT_BINS_PER_OCT,
     weighting: str = DEFAULT_WEIGHTING,
     corr_mode: str = DEFAULT_CORR_MODE,
     **vqt_kwargs,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Multi-hop relative pitch differences from a waveform.
 
     Args:
         x: mono input audio signal.
         sr: sample rate in Hz.
         hop_length: hop length for VQT, in samples.
-        diff_hops: hop differences, e.g. ``(1,)`` for adjacent frames,
+        hops: hop differences, e.g. ``(1,)`` for adjacent frames,
             ``(1, 2)`` for adjacent and next-adjacent frames.
         max_diff_cents: maximum allowed pitch difference in cents.
         bins_per_octave: bins per octave for VQT.
@@ -228,11 +228,9 @@ def vqt_diff_calculator(
     Returns:
         edges (*, 2): frame-index pairs for every pitch difference.
         estimates (*,): pitch differences in cents.
-        weights (*,): confidence for each pitch difference.
-        new_voicing_probs (M,): per-frame voicing probabilities from the
-            relative pitch confidences alone.
+        confidences (*,): confidence for each pitch difference.
     """
-    assert all(df > 0 for df in diff_hops), "diff_hops must be positive integers"
+    assert all(h > 0 for h in hops), "hops must be positive integers"
     # fail fast on an unknown scheme, before the expensive VQT
     _resolve_weighting(weighting)
 
@@ -241,16 +239,14 @@ def vqt_diff_calculator(
     diff_unit = 1200 / bins_per_octave
     max_diff_bins = int(max_diff_cents / diff_unit)
 
-    M = V.shape[1]
-    new_voicing_probs = np.zeros(M)
     setup = _vqt_xcorr_setup(V, max_diff_bins, corr_mode=corr_mode)
 
     diff_pitch_estimates = []
     diff_pitch_confidences = []
     edges = []
     # iterate through hop differences to calculate pitch differences
-    for jump in diff_hops:
-        hop_edges, pitch_diffs, diff_probs, voicing_contrib = hop_diff(
+    for jump in hops:
+        hop_edges, pitch_diffs, diff_probs, _ = hop_diff(
             V,
             jump,
             max_diff_bins,
@@ -263,12 +259,8 @@ def vqt_diff_calculator(
         diff_pitch_confidences.append(diff_probs)
         edges.append(hop_edges)
 
-        new_voicing_probs[:-jump] = np.maximum(voicing_contrib, new_voicing_probs[:-jump])
-        new_voicing_probs[jump:] = np.maximum(voicing_contrib, new_voicing_probs[jump:])
-
     return (
         np.concatenate(edges, axis=0),
         np.concatenate(diff_pitch_estimates),
         np.concatenate(diff_pitch_confidences),
-        new_voicing_probs,
     )

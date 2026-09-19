@@ -1,11 +1,16 @@
-"""Plugin-interface tests: plain-function estimator and solver through smooth()."""
+"""Contract tests: custom functions can replace the two cores.
+
+The package exposes exactly two core functions; each obeys one of the
+``rin.interfaces`` signatures. A caller swaps in their own implementation
+by calling their own function instead -- no wrapper, no registration.
+"""
 
 import functools
+import inspect
 
 import numpy as np
-import pytest
 
-from rin import smooth
+from rin import lp_smoother, vqt_diff_calculator
 
 SR = 16000
 HOP = int(0.02 * SR)
@@ -36,61 +41,47 @@ class CallableSolver:
         )
 
 
-def _sine_clip(dur=1.0):
-    t = np.arange(int(SR * dur)) / SR
-    x = 0.5 * np.sin(2 * np.pi * 220.0 * t)
-    n_frames = 1 + len(x) // HOP
-    f0 = np.full(n_frames, 220.0)
+def test_builtin_cores_match_documented_signatures():
+    est_params = list(inspect.signature(vqt_diff_calculator).parameters)
+    assert est_params[:4] == ["x", "sr", "hop_length", "hops"]
+    solver_params = list(inspect.signature(lp_smoother).parameters)
+    assert solver_params[:5] == [
+        "abs_estimates",
+        "abs_confidences",
+        "rel_edges",
+        "rel_estimates",
+        "rel_confidences",
+    ]
+
+
+def test_caller_wires_custom_functions():
+    rng = np.random.default_rng(0)
+    n_frames, M = 40, 40
+    x = rng.standard_normal(n_frames * HOP)
+    f0_cents = 6900.0 + rng.normal(0, 5, n_frames)
     strength = np.full(n_frames, 0.9)
-    return x, f0, strength
 
-
-def test_custom_estimator_and_solver_roundtrip():
-    x, f0, strength = _sine_clip()
-    f0_sm, voicing = smooth(
-        f0,
-        strength,
-        x,
-        SR,
-        hops=(1, 2),
-        estimator=zero_estimator,
-        solver=identity_solver,
-        return_voicing=True,
-    )
-    np.testing.assert_allclose(f0_sm, f0, rtol=1e-12)
+    edges, est, conf = zero_estimator(x, SR, HOP, (1, 2))
+    assert M == n_frames
+    sm_cents, voicing = identity_solver(f0_cents, strength, edges, est, conf)
+    np.testing.assert_allclose(sm_cents, f0_cents, rtol=1e-12)
     np.testing.assert_allclose(voicing, strength, rtol=1e-12)
 
 
 def test_any_callable_shape_is_accepted():
     # lambda, functools.partial, and callable objects all obey the contract.
-    x, f0, strength = _sine_clip()
-    f0_sm = smooth(
-        f0,
-        strength,
-        x,
-        SR,
-        hops=(1,),
-        estimator=lambda x_, sr_, hop_, hops_: zero_estimator(x_, sr_, hop_, hops_),
-        solver=functools.partial(identity_solver),
-    )
-    np.testing.assert_allclose(f0_sm, f0, rtol=1e-12)
-    f0_sm = smooth(
-        f0, strength, x, SR, hops=(1,), estimator=zero_estimator, solver=CallableSolver()
-    )
-    np.testing.assert_allclose(f0_sm, f0, rtol=1e-12)
+    rng = np.random.default_rng(1)
+    n_frames = 30
+    f0_cents = np.full(n_frames, 6900.0)
+    strength = np.full(n_frames, 0.9)
+    x = rng.standard_normal(n_frames * HOP)
 
+    est = functools.partial(zero_estimator)
+    solve = CallableSolver()
+    edges, _, _ = est(x, SR, HOP, (1,))
+    sm_cents, _ = solve(f0_cents, strength, edges, np.zeros(0), np.zeros(0))
+    np.testing.assert_allclose(sm_cents, f0_cents, rtol=1e-12)
 
-def test_custom_estimator_with_default_solver():
-    # Degenerate baseline (zero relative pitch) still runs through the LP.
-    x, f0, strength = _sine_clip()
-    f0_sm = smooth(f0, strength, x, SR, hops=(1,), estimator=zero_estimator)
-    assert f0_sm.shape == f0.shape
-    assert bool(np.isfinite(f0_sm).all())
-
-
-def test_noncallable_plugins_rejected():
-    x, f0, strength = _sine_clip()
-    with pytest.raises(TypeError):
-        smooth(f0, strength, x, SR, estimator=object())
-    with pytest.raises(TypeError):
-        smooth(f0, strength, x, SR, solver=42)
+    lam = lambda xc, s, h, hp: zero_estimator(xc, s, h, hp)  # noqa: E731
+    edges, _, _ = lam(x, SR, HOP, (1,))
+    assert edges.shape[1] == 2

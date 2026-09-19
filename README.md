@@ -25,29 +25,48 @@ pip install rin-pitch
 
 ```python
 import numpy as np
-import rin
+from rin import lp_smoother, vqt_diff_calculator
 
+# x: mono waveform, sr: sample rate
 # f0: (M,) absolute pitch in Hz on a 20 ms grid, NaN = unvoiced
 # strength: (M,) voicing confidence in [0, 1]
-# x: mono waveform, sr: sample rate
-f0_smooth, voicing = rin.smooth(f0, strength, x, sr, return_voicing=True)
+hop_length = int(0.02 * sr)
+
+# 1. relative pitch differences between frames (cents), with confidences
+edges, estimates, confidences = vqt_diff_calculator(x, sr, hop_length, hops=(1, 2, 3, 5))
+
+# 2. fuse with the absolute estimates through the network-flow LP (cents in/out).
+#    Unvoiced (NaN) frames get zero absolute confidence, so the LP bridges
+#    them through the relative edges alone.
+voiced = np.isfinite(f0)
+f0_cents = 1200 * np.log2(np.where(voiced, f0, 1.0))
+abs_conf = np.where(voiced, strength, 0.0)
+smooth_cents, voicing = lp_smoother(f0_cents, abs_conf, edges, estimates, confidences)
+f0_smooth = 2 ** (smooth_cents / 1200)
 ```
 
-Arrays in, arrays out -- the package does no file loading.
+Arrays in, arrays out -- the package does no file loading and no caching.
+Each caller wires their own pipeline (and their own VQT caching) around the
+two cores.
 
 ## API
 
-- `rin.smooth(f0, strength, x, sr, hops=(1, 2, 3, 5), ...)` -- high-level entry point.
-- `rin.rin_smooth(f0, strength, hop_cache, hops, ...)` -- fuse with a precomputed hop cache.
-- `rin.build_hop_cache(x, sr, hops, ...)` -- VQT once, per-hop `(edges, estimates, confidences)`.
-- `rin.lp_smoother(...)` -- the network-flow LP core (dual circulation form by default).
-- `rin.vqt_diff_calculator(...)` -- multi-hop VQT relative pitch differences.
+Two core functions:
+
+- `rin.vqt_diff_calculator(x, sr, hop_length, hops=(1,), ...)` -- multi-hop
+  relative pitch differences (cents) with confidences. Extra VQT options
+  (`max_diff_cents`, `bins_per_octave`, `weighting`, `corr_mode`, ...) are
+  plain kwargs -- pass your own.
+- `rin.lp_smoother(abs_estimates, abs_confidences, rel_edges, rel_estimates,
+  rel_confidences, dual_form=True)` -- network-flow LP fusion; inputs and
+  outputs in cents.
 
 ## Plugins
 
-Both stages are plain function signatures documented in `rin.interfaces` --
-implement a function with the right signature and pass it in. No classes or
-inheritance needed; any callable (function, lambda, `functools.partial`,
+Both cores are plain functions obeying the contracts in `rin.interfaces`
+(`DifferenceEstimator` and `Solver` are `Callable` type aliases). Implement
+your own function with the same signature and call it instead -- no classes
+or inheritance needed; any callable (function, lambda, `functools.partial`,
 callable object) works:
 
 ```python
@@ -59,7 +78,8 @@ def my_solver(abs_estimates, abs_confidences, rel_edges, rel_estimates, rel_conf
     # -> (smooth_pitch (M,) cents, voicing (M,) in [0,1])
     ...
 
-f0_smooth = rin.smooth(f0, strength, x, sr, estimator=my_estimator, solver=my_solver)
+edges, estimates, confidences = my_estimator(x, sr, hop_length, hops=(1, 2, 3, 5))
+smooth_cents, voicing = my_solver(f0_cents, strength, edges, estimates, confidences)
 ```
 
 ## Development

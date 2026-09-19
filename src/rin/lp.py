@@ -18,7 +18,7 @@ Both are solved with the HiGHS simplex solver bundled with SciPy.
 """
 
 import numpy as np
-from scipy.optimize import OptimizeResult, linprog
+from scipy.optimize import linprog
 from scipy.sparse import csr_matrix
 
 
@@ -29,7 +29,7 @@ def lp_smoother(
     rel_estimates: np.ndarray,
     rel_confidences: np.ndarray,
     dual_form: bool = True,
-) -> tuple[np.ndarray, np.ndarray, OptimizeResult]:
+) -> tuple[np.ndarray, np.ndarray]:
     """Smooth absolute pitch estimates with relative pitch constraints.
 
     Args:
@@ -47,7 +47,6 @@ def lp_smoother(
         new_voicing_probs: (M,) voicing probabilities fusing the absolute
             confidences with the distance-weighted (1/m^2) RMS of the incident
             relative-edge confidences, via a geometric mean.
-        res: the raw ``scipy.optimize.OptimizeResult`` from HiGHS.
 
     Raises:
         ValueError: if shapes disagree, values are non-finite, confidences
@@ -217,4 +216,4 @@ def lp_smoother(
     rel_rms = np.sqrt(np.divide(num, np.maximum(den, 1e-10)))
     new_voicing_probs = np.sqrt(np.clip(abs_confidences, 0.0, 1.0) * np.clip(rel_rms, 0.0, 1.0))
 
-    return smooth_pitch, new_voicing_probs, res
+    return smooth_pitch, new_voicing_probs

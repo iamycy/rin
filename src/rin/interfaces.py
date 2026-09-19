@@ -1,9 +1,9 @@
 """Plugin interfaces for rin-pitch.
 
 Both extension points are plain function signatures: implement a function
-with the documented signature and pass it to :func:`rin.smooth.smooth` (or
-:func:`rin.smooth.rin_smooth`). No inheritance, no classes required -- any
-callable works (function, lambda, ``functools.partial``, or a callable
+with the documented signature and call it in place of the built-in cores
+(:func:`rin.vqt_diff_calculator`, :func:`rin.lp_smoother`). No inheritance,
+no classes required -- any callable works (function, lambda, ``functools.partial``, or a callable
 object) as long as it obeys the signature.
 
 The contracts are expressed as :data:`typing.Callable` type aliases so
