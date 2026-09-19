@@ -5,9 +5,11 @@ The entry point is :func:`smooth`: absolute F0 (Hz) plus a mono waveform in,
 smoothed F0 (Hz) plus voicing probabilities out. The absolute estimates may
 come from any tracker; ``NaN`` marks unvoiced frames.
 
-Both stages are pluggable: pass a :class:`rin.interfaces.DifferenceEstimator`
-as ``estimator`` to replace the built-in VQT cross-correlation, and/or a
-:class:`rin.interfaces.Solver` as ``solver`` to replace the built-in LP.
+Both stages are pluggable: pass a function matching
+:func:`rin.interfaces.DifferenceEstimator` as ``estimator`` to replace the
+built-in VQT cross-correlation, and/or a function matching
+:func:`rin.interfaces.Solver` as ``solver`` to replace the built-in LP.
+Any callable with the documented signature works -- no classes needed.
 """
 
 import numpy as np
@@ -65,21 +67,22 @@ def build_hop_cache(
 
 
 def _check_estimator(estimator) -> DifferenceEstimator:
-    if not isinstance(estimator, DifferenceEstimator):
+    if not callable(estimator):
         raise TypeError(
-            "estimator must implement rin.interfaces.DifferenceEstimator: "
-            "an estimate(x, sr, hop_length, hops) method returning "
-            "(edges, estimates_cents, confidences)."
+            "estimator must be a callable with signature "
+            "(x, sr, hop_length, hops) -> (edges, estimates_cents, confidences); "
+            "see rin.interfaces.DifferenceEstimator."
         )
     return estimator
 
 
 def _check_solver(solver) -> Solver:
-    if not isinstance(solver, Solver):
+    if not callable(solver):
         raise TypeError(
-            "solver must implement rin.interfaces.Solver: "
-            "a solve(abs_estimates, abs_confidences, rel_edges, rel_estimates, "
-            "rel_confidences) method returning (smooth_pitch_cents, voicing)."
+            "solver must be a callable with signature "
+            "(abs_estimates, abs_confidences, rel_edges, rel_estimates, "
+            "rel_confidences) -> (smooth_pitch_cents, voicing); "
+            "see rin.interfaces.Solver."
         )
     return solver
 
@@ -102,8 +105,9 @@ def rin_smooth(
         hop_cache: per-hop ``(edges, estimates, confidences)`` as returned by
             :func:`build_hop_cache`, on the same frame grid as ``f0``.
         hops: subset of ``hop_cache`` keys to fuse.
-        solver: custom :class:`rin.interfaces.Solver`; defaults to the
-            built-in network-flow LP (:func:`rin.lp.lp_smoother`).
+        solver: custom solver function matching ``rin.interfaces.Solver``;
+            defaults to the built-in network-flow LP
+            (:func:`rin.lp.lp_smoother`).
         dual_form: solve the dual network-circulation LP (default) instead of
             the primal slack-variable LP. Only used with the default solver.
         return_voicing: also return the fused voicing probabilities.
@@ -121,7 +125,7 @@ def rin_smooth(
             hz2cent(f0), strength, edges, est, conf, dual_form=dual_form
         )
     else:
-        smooth_cents, voicing = _check_solver(solver).solve(hz2cent(f0), strength, edges, est, conf)
+        smooth_cents, voicing = _check_solver(solver)(hz2cent(f0), strength, edges, est, conf)
     f0_smooth = cent2hz(smooth_cents)
     if return_voicing:
         return f0_smooth, voicing
@@ -155,10 +159,11 @@ def smooth(
         x: mono input audio.
         sr: sample rate in Hz.
         hops: relative offset set, e.g. ``(1, 2, 3, 5)``.
-        estimator: custom :class:`rin.interfaces.DifferenceEstimator`;
-            defaults to the built-in VQT cross-correlation.
-        solver: custom :class:`rin.interfaces.Solver`; defaults to the
-            built-in network-flow LP.
+        estimator: custom pitch-difference function matching
+            ``rin.interfaces.DifferenceEstimator``; defaults to the built-in
+            VQT cross-correlation.
+        solver: custom solver function matching ``rin.interfaces.Solver``;
+            defaults to the built-in network-flow LP.
         period: frame hop in seconds.
         max_diff_cents: maximum VQT pitch-shift search in cents.
         vqt_bins_per_octave: VQT resolution.
@@ -190,7 +195,7 @@ def smooth(
         rel_est = np.concatenate([hop_cache[h][1] for h in hops])
         rel_conf = np.concatenate([hop_cache[h][2] for h in hops])
     else:
-        edges, rel_est, rel_conf = _check_estimator(estimator).estimate(
+        edges, rel_est, rel_conf = _check_estimator(estimator)(
             np.asarray(x), int(sr), hop_length, hops
         )
 
@@ -201,9 +206,7 @@ def smooth(
             f0_cents, strength, edges, rel_est, rel_conf, dual_form=dual_form
         )
     else:
-        smooth_cents, voicing = _check_solver(solver).solve(
-            f0_cents, strength, edges, rel_est, rel_conf
-        )
+        smooth_cents, voicing = _check_solver(solver)(f0_cents, strength, edges, rel_est, rel_conf)
     f0_smooth = cent2hz(smooth_cents)
     if return_voicing:
         return f0_smooth, voicing

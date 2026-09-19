@@ -45,23 +45,21 @@ Arrays in, arrays out -- the package does no file loading.
 
 ## Plugins
 
-Both stages are pluggable via `typing.Protocol` interfaces in `rin.interfaces`
-(no inheritance required -- any class with the right methods works):
+Both stages are plain function signatures documented in `rin.interfaces` --
+implement a function with the right signature and pass it in. No classes or
+inheritance needed; any callable (function, lambda, `functools.partial`,
+callable object) works:
 
 ```python
-from rin.interfaces import DifferenceEstimator, Solver
+def my_estimator(x, sr, hop_length, hops):
+    # -> (edges (E,2) int, estimates (E,) cents, confidences (E,) in [0,1])
+    ...
 
-class MyEstimator:
-    def estimate(self, x, sr, hop_length, hops):
-        # -> (edges (E,2) int, estimates (E,) cents, confidences (E,) in [0,1])
-        ...
+def my_solver(abs_estimates, abs_confidences, rel_edges, rel_estimates, rel_confidences):
+    # -> (smooth_pitch (M,) cents, voicing (M,) in [0,1])
+    ...
 
-class MySolver:
-    def solve(self, abs_estimates, abs_confidences, rel_edges, rel_estimates, rel_confidences):
-        # -> (smooth_pitch (M,) cents, voicing (M,) in [0,1])
-        ...
-
-f0_smooth = rin.smooth(f0, strength, x, sr, estimator=MyEstimator(), solver=MySolver())
+f0_smooth = rin.smooth(f0, strength, x, sr, estimator=my_estimator, solver=my_solver)
 ```
 
 ## Development
