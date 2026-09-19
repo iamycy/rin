@@ -79,8 +79,8 @@ Three core functions (for custom wiring):
   relative pitch differences (cents) with confidences. Uses the paper's
   fixed estimation path: Pearson (mean-subtracted) normalized
   cross-correlation of VQT magnitude slices with the arcsin x peak2mean
-  confidence weighting. `max_diff_cents`, `bins_per_octave`, and other VQT
-  options are plain kwargs -- pass your own.
+  confidence weighting. `max_diff_cents` (600), `bins_per_octave` (36),
+  `n_bins` (252), and other VQT options are plain kwargs -- pass your own.
 - `rin.lp_smoother(abs_estimates, abs_confidences, rel_edges, rel_estimates,
   rel_confidences)` -- network-flow LP fusion (dual min-cost circulation,
   HiGHS); inputs and output in cents.

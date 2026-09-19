@@ -24,6 +24,37 @@ def _edge_keep_mask(rel_edges: np.ndarray, rel_confidences: np.ndarray, M: int) 
     return valid & (rel_confidences > 0)
 
 
+def _validate_edge_inputs(
+    abs_confidences: np.ndarray,
+    rel_edges: np.ndarray,
+    rel_confidences: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, int]:
+    """Validate the (M, E) confidence/edge inputs shared by both cores.
+
+    Returns the normalized ``(abs_confidences, rel_edges, rel_confidences, M)``.
+
+    Raises:
+        ValueError: if shapes disagree, values are non-finite, confidences
+            are negative, or ``rel_edges`` is not an ``(E, 2)`` integer array.
+    """
+    abs_confidences = np.asarray(abs_confidences, dtype=float)
+    rel_confidences = np.asarray(rel_confidences, dtype=float)
+    rel_edges = np.asarray(rel_edges)
+    if rel_edges.size == 0:
+        rel_edges = np.zeros((0, 2), dtype=int)
+    if abs_confidences.ndim != 1 or rel_edges.ndim != 2 or rel_edges.shape[1] != 2:
+        raise ValueError("expected abs_confidences 1-D of length M and rel_edges of shape (E, 2)")
+    if not np.issubdtype(rel_edges.dtype, np.integer):
+        raise ValueError("rel_edges must contain integer frame indices")
+    if rel_confidences.shape != (len(rel_edges),):
+        raise ValueError("rel_confidences must have length E")
+    if not (np.isfinite(abs_confidences).all() and np.isfinite(rel_confidences).all()):
+        raise ValueError("confidences must be finite")
+    if (abs_confidences < 0).any() or (rel_confidences < 0).any():
+        raise ValueError("confidences must be non-negative")
+    return abs_confidences, rel_edges, rel_confidences, abs_confidences.size
+
+
 def estimate_voicing(
     abs_confidences: np.ndarray,
     rel_edges: np.ndarray,
@@ -53,23 +84,10 @@ def estimate_voicing(
         Edges referencing frames outside ``[0, M)`` are dropped, as are
         zero-weight edges (they carry no voicing evidence).
     """
-    abs_confidences = np.asarray(abs_confidences, dtype=float)
-    rel_confidences = np.asarray(rel_confidences, dtype=float)
-    rel_edges = np.asarray(rel_edges)
-    if rel_edges.size == 0:
-        rel_edges = np.zeros((0, 2), dtype=int)
-    if abs_confidences.ndim != 1 or rel_edges.ndim != 2 or rel_edges.shape[1] != 2:
-        raise ValueError("expected abs_confidences 1-D of length M and rel_edges of shape (E, 2)")
-    if not np.issubdtype(rel_edges.dtype, np.integer):
-        raise ValueError("rel_edges must contain integer frame indices")
-    if rel_confidences.shape != (len(rel_edges),):
-        raise ValueError("rel_confidences must have length E")
-    if not (np.isfinite(abs_confidences).all() and np.isfinite(rel_confidences).all()):
-        raise ValueError("confidences must be finite")
-    if (abs_confidences < 0).any() or (rel_confidences < 0).any():
-        raise ValueError("confidences must be non-negative")
+    abs_confidences, rel_edges, rel_confidences, M = _validate_edge_inputs(
+        abs_confidences, rel_edges, rel_confidences
+    )
 
-    M = abs_confidences.size
     keep = _edge_keep_mask(rel_edges, rel_confidences, M)
     rel_edges = rel_edges[keep]
     rel_confidences = rel_confidences[keep]
@@ -121,42 +139,26 @@ def lp_smoother(
         Voicing is a separate concern -- see :func:`estimate_voicing`.
     """
     abs_estimates = np.asarray(abs_estimates, dtype=float)
-    abs_confidences = np.asarray(abs_confidences, dtype=float)
     rel_estimates = np.asarray(rel_estimates, dtype=float)
-    rel_confidences = np.asarray(rel_confidences, dtype=float)
-    rel_edges = np.asarray(rel_edges)
-    if rel_edges.size == 0:
-        rel_edges = np.zeros((0, 2), dtype=int)
-    if (
-        abs_estimates.ndim != 1
-        or abs_confidences.shape != abs_estimates.shape
-        or rel_edges.ndim != 2
-        or rel_edges.shape[1] != 2
-    ):
-        raise ValueError(
-            "expected abs_estimates/abs_confidences 1-D of length M and rel_edges of shape (E, 2)"
-        )
-    if not np.issubdtype(rel_edges.dtype, np.integer):
-        raise ValueError("rel_edges must contain integer frame indices")
-    if rel_estimates.shape != (len(rel_edges),) or rel_confidences.shape != (len(rel_edges),):
-        raise ValueError("rel_estimates and rel_confidences must have length E")
-    if not (
-        np.isfinite(abs_estimates).all()
-        and np.isfinite(abs_confidences).all()
-        and np.isfinite(rel_estimates).all()
-        and np.isfinite(rel_confidences).all()
-    ):
-        raise ValueError("estimates and confidences must be finite")
-    if (abs_confidences < 0).any() or (rel_confidences < 0).any():
-        raise ValueError("confidences must be non-negative")
+    abs_confidences, rel_edges, rel_confidences, M = _validate_edge_inputs(
+        abs_confidences, rel_edges, rel_confidences
+    )
+    if abs_estimates.ndim != 1 or abs_estimates.shape != (M,):
+        raise ValueError("expected abs_estimates 1-D of length M")
+    if rel_estimates.shape != (len(rel_edges),):
+        raise ValueError("rel_estimates must have length E")
+    if not (np.isfinite(abs_estimates).all() and np.isfinite(rel_estimates).all()):
+        raise ValueError("estimates must be finite")
 
-    M = abs_estimates.size
     # Drop out-of-range and zero-weight edges (shared with estimate_voicing).
     keep = _edge_keep_mask(rel_edges, rel_confidences, M)
     rel_edges = rel_edges[keep]
     rel_estimates = rel_estimates[keep]
     rel_confidences = rel_confidences[keep]
 
+    # Floor the absolute weights: with exact zeros the dual's ground arcs are
+    # pinned to zero flow, which can make the circulation degenerate; 1e-6 is
+    # negligible next to real confidence weights but keeps the LP well-posed.
     abs_conf_lp = np.maximum(abs_confidences, 1e-6)
     E = len(rel_estimates)
 
@@ -191,6 +193,6 @@ def lp_smoother(
         bounds=bounds,
         method="highs",
     )
-    if not res.success:
+    if not res.success:  # pragma: no cover -- HiGHS fails only on degenerate input
         raise ValueError("LP smoothing failed: " + res.message)
     return -res.eqlin.marginals

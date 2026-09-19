@@ -16,6 +16,7 @@ from collections.abc import Sequence
 
 import numpy as np
 
+from ._utils import cent2hz, hz2cent
 from .lp import estimate_voicing, lp_smoother
 from .relative import vqt_diff_calculator
 
@@ -52,7 +53,8 @@ def smooth_pitch(
 
     Raises:
         ValueError: if ``f0_hz``/``strength`` are not 1-D of equal length,
-            or their length does not match the estimator's frame count.
+            their length does not match the estimator's frame count, or a
+            voiced frame has non-positive ``f0_hz``.
     """
     f0_hz = np.asarray(f0_hz, dtype=float)
     strength = np.asarray(strength, dtype=float)
@@ -62,7 +64,9 @@ def smooth_pitch(
     edges, estimates, confidences = vqt_diff_calculator(x, sr, hop_length, hops=hops, **vqt_kwargs)
     # The tracker frames must line up 1:1 with the estimator's frames;
     # out-of-range edges would otherwise be silently dropped downstream.
-    n_frames = int(edges.max()) + 1 if edges.size else 0
+    # (With fewer than two frames there are no edges; fall back to the VQT
+    # frame count directly.)
+    n_frames = int(edges.max()) + 1 if edges.size else 1 + len(x) // hop_length
     if len(f0_hz) != n_frames:
         raise ValueError(
             f"f0_hz has {len(f0_hz)} frames but the estimator produced "
@@ -72,9 +76,11 @@ def smooth_pitch(
     # Unvoiced (NaN) frames get zero absolute confidence, so the LP bridges
     # them through the relative edges alone.
     voiced = np.isfinite(f0_hz)
-    f0_cents = 1200.0 * np.log2(np.where(voiced, f0_hz, 1.0))
+    if not bool((f0_hz[voiced] > 0).all()):
+        raise ValueError("f0_hz must be positive on voiced (finite) frames")
+    f0_cents = hz2cent(np.where(voiced, f0_hz, 1.0))
     abs_conf = np.where(voiced, strength, 0.0)
 
     smooth_cents = lp_smoother(f0_cents, abs_conf, edges, estimates, confidences)
     voicing = estimate_voicing(abs_conf, edges, confidences)
-    return 2.0 ** (smooth_cents / 1200.0), voicing
+    return cent2hz(smooth_cents), voicing

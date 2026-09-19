@@ -18,6 +18,7 @@ rin-pitch = { path = ".", editable = true }
 
 [feature.dev.dependencies]
 pytest = "*"
+pytest-cov = ">=7.1.0, <8"
 ruff = "*"
 python-build = "*"
 

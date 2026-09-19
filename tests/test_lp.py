@@ -84,6 +84,8 @@ def test_empty_edges_returns_absolute():
 def test_invalid_inputs_fail_fast():
     _, abs_est, abs_conf, edges, rel_est, rel_conf = _synth(M=50)
     with pytest.raises(ValueError):
+        lp_smoother(abs_est[:-1], abs_conf, edges, rel_est, rel_conf)  # length mismatch
+    with pytest.raises(ValueError):
         lp_smoother(abs_est, -abs_conf, edges, rel_est, rel_conf)  # negative conf
     with pytest.raises(ValueError):
         lp_smoother(abs_est, abs_conf, edges, rel_est, -rel_conf)
@@ -95,3 +97,5 @@ def test_invalid_inputs_fail_fast():
         bad = abs_est.copy()
         bad[0] = np.inf
         lp_smoother(bad, abs_conf, edges, rel_est, rel_conf)
+    with pytest.raises(ValueError):
+        lp_smoother(abs_est, abs_conf, edges.astype(float), rel_est, rel_conf)  # non-integer

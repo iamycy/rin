@@ -7,6 +7,7 @@ pitch difference in cents, and the peak's shape gives a confidence weight.
 """
 
 from collections.abc import Sequence
+from operator import index as _index
 
 import numpy as np
 from librosa import vqt
@@ -44,6 +45,7 @@ def compute_vqt(
     sr: int,
     hop_length: int,
     bins_per_octave: int = VQT_BINS_PER_OCT,
+    n_bins: int = VQT_N_BINS,
     **vqt_kwargs,
 ) -> np.ndarray:
     """Magnitude VQT spectrogram, factored out so it can be computed once and
@@ -55,6 +57,7 @@ def compute_vqt(
             sr=sr,
             hop_length=hop_length,
             bins_per_octave=bins_per_octave,
+            n_bins=n_bins,
             **vqt_kwargs,
         )
     )
@@ -156,14 +159,29 @@ def vqt_diff_calculator(
             ``(1, 2)`` for adjacent and next-adjacent frames.
         max_diff_cents: maximum allowed pitch difference in cents.
         bins_per_octave: bins per octave for VQT.
-        vqt_kwargs: additional keyword arguments for VQT, e.g. ``n_bins``.
+        vqt_kwargs: additional keyword arguments for VQT, e.g. ``n_bins``
+            (defaults to 252, the paper's setting).
 
     Returns:
         edges (*, 2): frame-index pairs for every pitch difference.
         estimates (*,): pitch differences in cents.
         confidences (*,): confidence for each pitch difference.
+
+    Raises:
+        ValueError: if ``x`` is not a mono (1-D) waveform, or ``hops`` is
+            empty or contains non-positive values.
     """
-    assert all(h > 0 for h in hops), "hops must be positive integers"
+    x = np.asarray(x, dtype=float)
+    if x.ndim != 1:
+        raise ValueError("x must be a mono (1-D) waveform")
+    try:
+        hops = tuple(_index(h) for h in hops)
+    except TypeError:
+        raise ValueError("hops must be integers") from None
+    if not hops:
+        raise ValueError("hops must be non-empty")
+    if any(h <= 0 for h in hops):
+        raise ValueError("hops must be positive integers")
 
     V = compute_vqt(x, sr, hop_length, bins_per_octave=bins_per_octave, **vqt_kwargs)
 

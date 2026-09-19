@@ -73,3 +73,11 @@ def test_smooth_pitch_rejects_mismatched_frames():
         smooth_pitch(x, noisy_f0, strength[:-5], SR, HOP)
     with pytest.raises(ValueError):
         smooth_pitch(x, noisy_f0, strength, SR, HOP * 2)  # wrong grid
+
+
+def test_smooth_pitch_rejects_nonpositive_f0():
+    x, _, noisy_f0, strength = _noisy_chirp()
+    bad = noisy_f0.copy()
+    bad[10] = 0.0  # voiced frame with non-positive f0
+    with pytest.raises(ValueError):
+        smooth_pitch(x, bad, strength, SR, HOP)
