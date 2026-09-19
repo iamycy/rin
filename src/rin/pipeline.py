@@ -39,25 +39,37 @@ def smooth_pitch(
 ) -> tuple[np.ndarray, np.ndarray]:
     """Smooth absolute pitch estimates with RIN, as reported in the paper.
 
-    Args:
-        x: mono input audio signal.
-        f0: (M,) absolute pitch per frame, in cents; NaN (or inf) marks
-            unvoiced frames.
-        strength: (M,) tracker voicing confidence in [0, 1].
-        sr: sample rate in Hz.
-        hop_length: hop length in samples (shared by the VQT and ``f0``).
-        hops: hop differences for the relative estimator.
-        vqt_kwargs: extra keyword arguments forwarded to
-            :func:`rin.relative.vqt_diff_calculator` (e.g. ``max_diff_cents``,
-            ``bins_per_octave``, ``n_bins``).
+    Parameters
+    ----------
+    x : np.ndarray [shape=(..., n)]
+        Mono input audio signal.
+    f0 : np.ndarray [shape=(M,)]
+        Absolute pitch per frame, in cents; NaN (or inf) marks unvoiced frames.
+    strength : np.ndarray [shape=(M,)]
+        Tracker voicing confidence in [0, 1].
+    sr : int
+        Sample rate in Hz.
+    hop_length : int
+        Hop length in samples (shared by the VQT and ``f0``).
+    hops : sequence of int
+        Hop differences for the relative estimator.
+    **vqt_kwargs
+        Extra keyword arguments forwarded to
+        :func:`rin.relative.vqt_diff_calculator` (e.g. ``max_diff_cents``,
+        ``bins_per_octave``, ``n_bins``).
 
-    Returns:
-        f0_smooth: (M,) smoothed pitch, in cents.
-        voicing: (M,) voicing probabilities in [0, 1].
+    Returns
+    -------
+    f0_smooth : np.ndarray [shape=(M,)]
+        Smoothed pitch, in cents.
+    voicing : np.ndarray [shape=(M,)]
+        Voicing probabilities in [0, 1].
 
-    Raises:
-        ValueError: if ``f0``/``strength`` are not 1-D of equal length,
-            or their length does not match the estimator's frame count.
+    Raises
+    ------
+    ValueError
+        If ``f0``/``strength`` are not 1-D of equal length, or their length
+        does not match the estimator's frame count.
     """
     f0 = np.asarray(f0, dtype=float)
     strength = np.asarray(strength, dtype=float)

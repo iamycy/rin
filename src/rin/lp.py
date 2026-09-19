@@ -29,13 +29,33 @@ def _validate_edge_inputs(
     rel_edges: np.ndarray,
     rel_confidences: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, int]:
-    """Validate the (M, E) confidence/edge inputs shared by both cores.
+    """Validate the confidence and edge inputs shared by both cores.
 
-    Returns the normalized ``(abs_confidences, rel_edges, rel_confidences, M)``.
+    Parameters
+    ----------
+    abs_confidences : np.ndarray [shape=(M,)]
+        Confidence/weight of each absolute estimate.
+    rel_edges : np.ndarray [shape=(E, 2)]
+        Frame-index pairs ``(u, v)`` for each relative edge.
+    rel_confidences : np.ndarray [shape=(E,)]
+        Confidence/weight of each relative estimate.
 
-    Raises:
-        ValueError: if shapes disagree, values are non-finite, confidences
-            are negative, or ``rel_edges`` is not an ``(E, 2)`` integer array.
+    Returns
+    -------
+    abs_confidences : np.ndarray [shape=(M,)]
+        Normalized absolute confidences.
+    rel_edges : np.ndarray [shape=(E, 2)]
+        Normalized integer edge array.
+    rel_confidences : np.ndarray [shape=(E,)]
+        Normalized relative confidences.
+    M : int
+        Number of frames.
+
+    Raises
+    ------
+    ValueError
+        If shapes disagree, values are non-finite, confidences are negative,
+        or ``rel_edges`` is not an ``(E, 2)`` integer array.
     """
     abs_confidences = np.asarray(abs_confidences, dtype=float)
     rel_confidences = np.asarray(rel_confidences, dtype=float)
@@ -70,21 +90,30 @@ def estimate_voicing(
     tracker's absolute confidence (in [0, 1]) via a fuzzy AND (geometric
     mean).
 
-    Args:
-        abs_confidences: (M,) confidence/weight of each absolute estimate.
-        rel_edges: (E, 2) frame-index pairs (u, v) for each relative edge.
-        rel_confidences: (E,) confidence/weight of each relative estimate.
+    Parameters
+    ----------
+    abs_confidences : np.ndarray [shape=(M,)]
+        Confidence/weight of each absolute estimate.
+    rel_edges : np.ndarray [shape=(E, 2)]
+        Frame-index pairs ``(u, v)`` for each relative edge.
+    rel_confidences : np.ndarray [shape=(E,)]
+        Confidence/weight of each relative estimate.
 
-    Returns:
-        voicing: (M,) voicing probabilities in [0, 1].
+    Returns
+    -------
+    voicing : np.ndarray [shape=(M,)]
+        Voicing probabilities in [0, 1].
 
-    Raises:
-        ValueError: if shapes disagree, values are non-finite, confidences
-            are negative, or ``rel_edges`` is not an ``(E, 2)`` integer array.
+    Raises
+    ------
+    ValueError
+        If shapes disagree, values are non-finite, confidences are negative,
+        or ``rel_edges`` is not an ``(E, 2)`` integer array.
 
-    Notes:
-        Edges referencing frames outside ``[0, M)`` are dropped, as are
-        zero-weight edges (they carry no voicing evidence).
+    Notes
+    -----
+    Edges referencing frames outside ``[0, M)`` are dropped, as are
+    zero-weight edges (they carry no voicing evidence).
     """
     abs_confidences, rel_edges, rel_confidences, M = _validate_edge_inputs(
         abs_confidences, rel_edges, rel_confidences
@@ -124,25 +153,40 @@ def lp_smoother(
     ...): ``abs_estimates`` and ``rel_estimates`` must share it, and the
     output is in the same domain. This package never converts units.
 
-    Args:
-        abs_estimates: (M,) absolute pitch per frame.
-        abs_confidences: (M,) confidence/weight of each absolute estimate.
-        rel_edges: (E, 2) frame-index pairs (u, v) for each relative edge.
-        rel_estimates: (E,) pitch difference f[v] - f[u] per edge.
-        rel_confidences: (E,) confidence/weight of each relative estimate.
-            Zero-weight edges are dropped (they cannot bind the optimum).
+    Parameters
+    ----------
+    abs_estimates : np.ndarray [shape=(M,)]
+        Absolute pitch per frame.
+    abs_confidences : np.ndarray [shape=(M,)]
+        Confidence/weight of each absolute estimate.
+    rel_edges : np.ndarray [shape=(E, 2)]
+        Frame-index pairs ``(u, v)`` for each relative edge.
+    rel_estimates : np.ndarray [shape=(E,)]
+        Pitch difference ``f[v] - f[u]`` per edge.
+    rel_confidences : np.ndarray [shape=(E,)]
+        Confidence/weight of each relative estimate. Zero-weight edges are
+        dropped (they cannot bind the optimum).
 
-    Returns:
-        smooth_pitch: (M,) smoothed pitch contour.
+    Returns
+    -------
+    smooth_pitch : np.ndarray [shape=(M,)]
+        Smoothed pitch contour.
 
-    Raises:
-        ValueError: if shapes disagree, values are non-finite, confidences
-            are negative, or ``rel_edges`` is not an ``(E, 2)`` integer array.
+    Raises
+    ------
+    ValueError
+        If shapes disagree, values are non-finite, confidences are negative,
+        or ``rel_edges`` is not an ``(E, 2)`` integer array.
 
-    Notes:
-        Edges referencing frames outside ``[0, M)`` are dropped, as are
-        zero-weight edges (they cannot bind the optimum in either form).
-        Voicing is a separate concern -- see :func:`estimate_voicing`.
+    See Also
+    --------
+    estimate_voicing : Fuse confidences into per-frame voicing probabilities.
+
+    Notes
+    -----
+    Edges referencing frames outside ``[0, M)`` are dropped, as are
+    zero-weight edges (they cannot bind the optimum in either form).
+    Voicing is a separate concern -- see :func:`estimate_voicing`.
     """
     abs_estimates = np.asarray(abs_estimates, dtype=float)
     rel_estimates = np.asarray(rel_estimates, dtype=float)

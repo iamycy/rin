@@ -48,8 +48,29 @@ def compute_vqt(
     n_bins: int = VQT_N_BINS,
     **vqt_kwargs,
 ) -> np.ndarray:
-    """Magnitude VQT spectrogram, factored out so it can be computed once and
-    reused across many diff-hops.
+    """Compute the magnitude VQT spectrogram.
+
+    Factored out so it can be computed once and reused across many diff-hops.
+
+    Parameters
+    ----------
+    x : np.ndarray [shape=(..., n)]
+        Mono input audio signal.
+    sr : int
+        Sample rate in Hz.
+    hop_length : int
+        Hop length for the VQT, in samples.
+    bins_per_octave : int
+        Bins per octave for the VQT.
+    n_bins : int
+        Total number of VQT bins.
+    **vqt_kwargs
+        Additional keyword arguments passed to :func:`librosa.vqt`.
+
+    Returns
+    -------
+    V : np.ndarray [shape=(n_bins, n_frames)]
+        Magnitude VQT spectrogram.
     """
     return np.abs(
         vqt(
@@ -64,9 +85,28 @@ def compute_vqt(
 
 
 def _vqt_xcorr_setup(V: np.ndarray, max_diff_bins: int):
-    """Precompute the padded VQT, sliding-window norms and sliding-window view
-    used by every hop's Pearson normalized cross-correlation. Depends only on
+    """Precompute the padded VQT, sliding-window norms, and sliding-window view.
+
+    Used by every hop's Pearson normalized cross-correlation. Depends only on
     ``V`` and ``max_diff_bins`` (not on the hop), so it is computed once per clip.
+
+    Parameters
+    ----------
+    V : np.ndarray [shape=(n_bins, n_frames)]
+        Magnitude VQT spectrogram.
+    max_diff_bins : int
+        Maximum pitch-shift search radius, in VQT bins.
+
+    Returns
+    -------
+    sliding_V : np.ndarray
+        Sliding-window view of the padded VQT.
+    sliding_V_norm : np.ndarray
+        Norm of each sliding window (mean-subtracted).
+    window_sum : np.ndarray
+        Windowed sums of the VQT magnitudes, for mean subtraction.
+    K_tau : np.ndarray
+        Overlap lengths per shift, for mean subtraction.
     """
     F = V.shape[0]
     padded_V = np.pad(
@@ -95,13 +135,35 @@ def hop_diff(
     diff_unit: float,
     setup=None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Cross-correlation pitch differences for a *single* hop ``jump``.
+    """Cross-correlation pitch differences for a single hop.
 
-    Returns ``(edges, estimates, confidences)`` for this hop. ``edges`` are
-    frame-index pairs, ``estimates`` are in cents.
+    Parameters
+    ----------
+    V : np.ndarray [shape=(n_bins, n_frames)]
+        Magnitude VQT spectrogram.
+    jump : int
+        Frame offset between correlated frame pairs.
+    max_diff_bins : int
+        Maximum pitch-shift search radius, in VQT bins.
+    diff_unit : float
+        Cents per VQT bin.
+    setup : tuple or None
+        Precomputed values from ``_vqt_xcorr_setup``. If None, they are
+        computed from ``V`` and ``max_diff_bins``.
 
-    Raises:
-        ValueError: if ``jump`` is not a positive integer.
+    Returns
+    -------
+    edges : np.ndarray [shape=(n_frames - jump, 2)]
+        Frame-index pairs ``(n, n + jump)``.
+    estimates : np.ndarray [shape=(n_frames - jump,)]
+        Pitch differences in cents.
+    confidences : np.ndarray [shape=(n_frames - jump,)]
+        Confidence weight for each pitch difference.
+
+    Raises
+    ------
+    ValueError
+        If ``jump`` is not a positive integer.
     """
     try:
         jump = _index(jump)
@@ -160,27 +222,40 @@ def vqt_diff_calculator(
     normalized cross-correlation of VQT magnitude slices, with the
     arcsin x peak2mean confidence weighting.
 
-    Args:
-        x: mono input audio signal.
-        sr: sample rate in Hz.
-        hop_length: hop length for VQT, in samples.
-        hops: hop differences, e.g. ``(1,)`` for adjacent frames,
-            ``(1, 2)`` for adjacent and next-adjacent frames.
-        max_diff_cents: maximum allowed pitch difference in cents.
-        bins_per_octave: bins per octave for VQT.
-        vqt_kwargs: additional keyword arguments for VQT, e.g. ``n_bins``
-            (defaults to 252, the paper's setting).
+    Parameters
+    ----------
+    x : np.ndarray [shape=(..., n)]
+        Mono input audio signal.
+    sr : int
+        Sample rate in Hz.
+    hop_length : int
+        Hop length for the VQT, in samples.
+    hops : sequence of int
+        Hop differences, e.g. ``(1,)`` for adjacent frames, ``(1, 2)`` for
+        adjacent and next-adjacent frames.
+    max_diff_cents : float
+        Maximum allowed pitch difference in cents.
+    bins_per_octave : int
+        Bins per octave for the VQT.
+    **vqt_kwargs
+        Additional keyword arguments for :func:`librosa.vqt`, e.g. ``n_bins``
+        (defaults to 252, the paper's setting).
 
-    Returns:
-        edges (*, 2): frame-index pairs for every pitch difference.
-        estimates (*,): pitch differences in cents.
-        confidences (*,): confidence for each pitch difference.
+    Returns
+    -------
+    edges : np.ndarray [shape=(E, 2)]
+        Frame-index pairs for every pitch difference.
+    estimates : np.ndarray [shape=(E,)]
+        Pitch differences in cents.
+    confidences : np.ndarray [shape=(E,)]
+        Confidence for each pitch difference.
 
-    Raises:
-        ValueError: if ``x`` is not a mono (1-D) waveform, ``hops`` is
-            empty or contains non-positive values, ``bins_per_octave``
-            is not positive, or ``max_diff_cents`` allows less than
-            one VQT bin of search.
+    Raises
+    ------
+    ValueError
+        If ``x`` is not a mono (1-D) waveform, ``hops`` is empty or contains
+        non-positive values, ``bins_per_octave`` is not positive, or
+        ``max_diff_cents`` allows less than one VQT bin of search.
     """
     x = np.asarray(x, dtype=float)
     if x.ndim != 1:

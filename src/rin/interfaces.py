@@ -24,17 +24,25 @@ DifferenceEstimator: TypeAlias = Callable[
 
 Signature: ``(x, sr, hop_length, hops) -> (edges, estimates, confidences)``.
 
-Args:
-    x: mono input audio.
-    sr: sample rate in Hz.
-    hop_length: frame hop in samples (defines the output frame grid).
-    hops: relative frame offsets to estimate, e.g. ``(1, 2, 3, 5)``.
+Parameters
+----------
+x : np.ndarray [shape=(..., n)]
+    Mono input audio.
+sr : int
+    Sample rate in Hz.
+hop_length : int
+    Frame hop in samples (defines the output frame grid).
+hops : sequence of int
+    Relative frame offsets to estimate, e.g. ``(1, 2, 3, 5)``.
 
-Returns:
-    edges: ``(E, 2)`` integer frame-index pairs ``(u, v)``.
-    estimates: ``(E,)`` pitch differences ``f[v] - f[u]`` in cents.
-    confidences: ``(E,)`` weights in ``[0, 1]``; zero-weight edges are
-        dropped before solving.
+Returns
+-------
+edges : np.ndarray [shape=(E, 2)]
+    Integer frame-index pairs ``(u, v)``.
+estimates : np.ndarray [shape=(E,)]
+    Pitch differences ``f[v] - f[u]`` in cents.
+confidences : np.ndarray [shape=(E,)]
+    Weights in ``[0, 1]``; zero-weight edges are dropped before solving.
 """
 
 Solver: TypeAlias = Callable[
@@ -49,15 +57,23 @@ rel_confidences) -> smooth_pitch``.
 The pitch domain is the caller's choice -- ``abs_estimates`` and
 ``rel_estimates`` must share it, and the output is in the same domain.
 
-Args:
-    abs_estimates: ``(M,)`` absolute pitch per frame.
-    abs_confidences: ``(M,)`` weights in ``[0, 1]``.
-    rel_edges: ``(E, 2)`` integer frame-index pairs.
-    rel_estimates: ``(E,)`` relative pitch differences.
-    rel_confidences: ``(E,)`` weights in ``[0, 1]``.
+Parameters
+----------
+abs_estimates : np.ndarray [shape=(M,)]
+    Absolute pitch per frame.
+abs_confidences : np.ndarray [shape=(M,)]
+    Weights in ``[0, 1]``.
+rel_edges : np.ndarray [shape=(E, 2)]
+    Integer frame-index pairs.
+rel_estimates : np.ndarray [shape=(E,)]
+    Relative pitch differences.
+rel_confidences : np.ndarray [shape=(E,)]
+    Weights in ``[0, 1]``.
 
-Returns:
-    smooth_pitch: ``(M,)`` fused pitch contour.
+Returns
+-------
+smooth_pitch : np.ndarray [shape=(M,)]
+    Fused pitch contour.
 """
 
 VoicingEstimator: TypeAlias = Callable[
@@ -68,11 +84,17 @@ VoicingEstimator: TypeAlias = Callable[
 
 Signature: ``(abs_confidences, rel_edges, rel_confidences) -> voicing``.
 
-Args:
-    abs_confidences: ``(M,)`` weights in ``[0, 1]``.
-    rel_edges: ``(E, 2)`` integer frame-index pairs.
-    rel_confidences: ``(E,)`` weights in ``[0, 1]``.
+Parameters
+----------
+abs_confidences : np.ndarray [shape=(M,)]
+    Weights in ``[0, 1]``.
+rel_edges : np.ndarray [shape=(E, 2)]
+    Integer frame-index pairs.
+rel_confidences : np.ndarray [shape=(E,)]
+    Weights in ``[0, 1]``.
 
-Returns:
-    voicing: ``(M,)`` voicing probabilities in ``[0, 1]``.
+Returns
+-------
+voicing : np.ndarray [shape=(M,)]
+    Voicing probabilities in ``[0, 1]``.
 """
