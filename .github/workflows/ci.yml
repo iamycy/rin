@@ -14,11 +14,11 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # hatch-vcs derives the version from git tags
           fetch-depth: 0
-      - uses: prefix-dev/setup-pixi@v0.8.1
+      - uses: prefix-dev/setup-pixi@v0.10.2
         with:
           pixi-version: latest
       - run: pixi run lint
@@ -28,15 +28,15 @@ jobs:
     name: build sdist and wheel
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # hatch-vcs derives the version from git tags
           fetch-depth: 0
-      - uses: prefix-dev/setup-pixi@v0.8.1
+      - uses: prefix-dev/setup-pixi@v0.10.2
         with:
           pixi-version: latest
       - run: pixi run build
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dist
           path: dist/
