@@ -1,6 +1,6 @@
 name: Release
 
-# Publish to PyPI on version tags, e.g. v0.1.0.
+# Publish to PyPI on version tags, e.g. v1.0.0.
 # First release: create a pending trusted publisher for the `rin-pitch`
 # project at https://pypi.org/manage/project/rin-pitch/settings/publishing/
 # pointing at this repo before pushing the tag.

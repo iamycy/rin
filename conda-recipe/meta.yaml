@@ -16,7 +16,7 @@
 # section in pixi.toml).
 
 {% set name = "rin-pitch" %}
-{% set version = "0.1.0" %}
+{% set version = "1.0.0" %}
 
 package:
   name: {{ name|lower }}

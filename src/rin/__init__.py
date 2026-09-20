@@ -20,7 +20,7 @@ from .lp import estimate_voicing, lp_smoother
 from .pipeline import HOPS, smooth_pitch
 from .relative import vqt_diff_calculator
 
-__version__ = "0.1.0"
+__version__ = "1.0.0"
 
 __all__ = [
     "DifferenceEstimator",

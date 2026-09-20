@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "rin-pitch"
-version = "0.1.0"
+version = "1.0.0"
 description = "Relative Interval Network (RIN) pitch smoothing: fuse absolute F0 estimates with multi-hop VQT relative pitch differences through a network-flow LP"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -19,11 +19,7 @@ classifiers = [
     "Topic :: Multimedia :: Sound/Audio :: Analysis",
     "Topic :: Scientific/Engineering :: Information Analysis",
 ]
-dependencies = [
-    "numpy>=2",
-    "scipy",
-    "librosa",
-]
+dependencies = ["numpy>=2", "scipy", "librosa"]
 
 [project.urls]
 Homepage = "https://github.com/iamycy/rin"

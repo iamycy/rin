@@ -1,6 +1,6 @@
 [workspace]
 name = "rin-pitch"
-version = "0.1.0"
+version = "1.0.0"
 description = "Relative Interval Network (RIN) pitch smoothing: fuse absolute F0 estimates with multi-hop VQT relative pitch differences through a network-flow LP"
 authors = ["Chin-Yun Yu", "Chi-Jen Peng"]
 channels = ["conda-forge"]
@@ -11,7 +11,7 @@ preview = ["pixi-build"]
 # via the pixi-build-python backend (reads name/version/deps from pyproject.toml).
 [package]
 name = "rin-pitch"
-version = "0.1.0"
+version = "1.0.0"
 
 [package.build]
 backend = { name = "pixi-build-python", version = "*" }
