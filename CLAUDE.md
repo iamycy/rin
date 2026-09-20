@@ -88,7 +88,7 @@ min_f  Σ_n w_n |f[n] − a[n]| + Σ_(u,v)∈E w_uv |f[v] − f[u] − d_uv|
 ```
 
 by solving its **Lagrangian dual** — a min-cost circulation on a graph with one auxiliary ground node — instead of the primal.
-  Consequences when editing:
+Consequences when editing:
 
 - `B` is the `M × (M+E)` node-arc incidence matrix: arcs `0..M-1` are ground→node (absolute terms), arcs `M..M+E-1` are `u→v` (relative terms).
 - The objective is `c = -all_deltas` and the answer is `-res.eqlin.marginals` (node potentials).
@@ -100,34 +100,34 @@ by solving its **Lagrangian dual** — a min-cost circulation on a graph with on
 ### VQT relative estimation
 
 `relative.py` implements one fixed estimation path — the paper's — and it is intentionally not configurable: Pearson (mean-subtracted) normalized cross-correlation of VQT magnitude slices, with confidence = `arcsin` dot weight × `peak2mean` flatness weight (`_dot_weight` × `_flat_weight`).
-  VQT shape parameters (`bins_per_octave=36`, `n_bins=252`, `max_diff_cents=600`) and extra `librosa.vqt` kwargs are plain arguments.
-  The paper's hop set is `HOPS = (1, 2, 3, 5)`, exported from `rin`.
+VQT shape parameters (`bins_per_octave=36`, `n_bins=252`, `max_diff_cents=600`) and extra `librosa.vqt` kwargs are plain arguments.
+The paper's hop set is `HOPS = (1, 2, 3, 5)`, exported from `rin`.
 
 Performance structure: `compute_vqt` and `_vqt_xcorr_setup` are factored out because the padded VQT, sliding-window view, and window norms depend only on `(V, max_diff_bins)` — not on the hop — so they are computed once per clip and passed into every `hop_diff` call.
-  Keep new per-hop work out of the setup and vice versa.
+Keep new per-hop work out of the setup and vice versa.
 
 Peak picking rectifies correlations before `argmax`; frames whose peak lands on the search boundary get zero confidence via `hit_boundary`, which also covers the all-negative-column collapse to index 0.
-  Dropping the sub-bin offset at boundary peaks (`p = np.where(hit_boundary, 0.0, p)`) is what keeps every returned estimate inside the ±`max_diff_cents` window.
-  The stencil around a boundary peak is not a neighbourhood of it (`idx - 1 == -1` indexes from the far end), which is harmless only because both consumers of that stencil — `p` and `diff_probs` — are zeroed at `hit_boundary`.
-  `max_diff_cents` is validated from both sides: at least one VQT bin of search, and strictly fewer than `n_bins` (at `n_bins` the overlap length `K_tau` hits zero and the correlations go NaN).
+Dropping the sub-bin offset at boundary peaks (`p = np.where(hit_boundary, 0.0, p)`) is what keeps every returned estimate inside the ±`max_diff_cents` window.
+The stencil around a boundary peak is not a neighbourhood of it (`idx - 1 == -1` indexes from the far end), which is harmless only because both consumers of that stencil — `p` and `diff_probs` — are zeroed at `hit_boundary`.
+`max_diff_cents` is validated from both sides: at least one VQT bin of search, and strictly fewer than `n_bins` (at `n_bins` the overlap length `K_tau` hits zero and the correlations go NaN).
 
 ## Tests
 
 All tests use synthetic signals (sines, chirps, seeded RNG) — there are no audio fixtures, and tests should stay self-contained that way.
-  Coverage is split by module: `test_lp.py` (dual vs. primal, validation), `test_relative.py` (estimator accuracy on known chirps), `test_voicing.py`, `test_pipeline.py` (end-to-end plus the manual-wiring pattern), `test_interfaces.py` (signature conformance only).
+Coverage is split by module: `test_lp.py` (dual vs. primal, validation), `test_relative.py` (estimator accuracy on known chirps), `test_voicing.py`, `test_pipeline.py` (end-to-end plus the manual-wiring pattern), `test_interfaces.py` (signature conformance only).
 
 ## Release mechanics
 
 **The git tag is the only source of truth for the version — no file in the repo declares one.** `hatch-vcs` derives it from `git describe` at build time, and `rin.__version__` reads the installed metadata through `importlib.metadata`.
-  Releasing is `git tag v1.1.0 && git push --tags`, which triggers `release.yml`.
-  Between tags the version is a dev string such as `0.1.dev18+g6afb39f`, so a working checkout will not show a clean number.
+Releasing is `git tag v1.1.0 && git push --tags`, which triggers `release.yml`.
+Between tags the version is a dev string such as `0.1.dev18+g6afb39f`, so a working checkout will not show a clean number.
 
 Both workflows check out with `fetch-depth: 0`.
-  This is load-bearing: `hatch-vcs` needs the full history and tags, and the default shallow clone would silently produce a `0.0.0` version and publish it to PyPI.
+This is load-bearing: `hatch-vcs` needs the full history and tags, and the default shallow clone would silently produce a `0.0.0` version and publish it to PyPI.
 
 `pixi build` is deliberately **not** configured (no `[package]` table, no `preview = ["pixi-build"]`).
-  Pixi requires a static `[project] version` and rejects `dynamic = ["version"]` with `There was no version defined for the recipe`, so its build backend is incompatible with tag-derived versioning.
-  Nothing depended on it: CI and release both run `pixi run build` (`python -m build`), and conda-forge builds from the PyPI sdist, whose `PKG-INFO` carries the resolved version.
+Pixi requires a static `[project] version` and rejects `dynamic = ["version"]` with `There was no version defined for the recipe`, so its build backend is incompatible with tag-derived versioning.
+Nothing depended on it: CI and release both run `pixi run build` (`python -m build`), and conda-forge builds from the PyPI sdist, whose `PKG-INFO` carries the resolved version.
 
 `conda-recipe/meta.yaml` is prepared but **not submitted** to conda-forge.
-  Its header lists the submission steps, each of which needs explicit approval: the recipe's `sha256` is a placeholder until the first PyPI sdist exists, and per the owner's decision recorded there, PyPI publication is blocked before 2026-09-23.
+Its header lists the submission steps, each of which needs explicit approval: the recipe's `sha256` is a placeholder until the first PyPI sdist exists, and per the owner's decision recorded there, PyPI publication is blocked before 2026-09-23.
