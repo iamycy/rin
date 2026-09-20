@@ -22,6 +22,7 @@ jobs:
         with:
           pixi-version: latest
       - run: pixi run lint
+      - run: pixi run docstrings
       - run: pixi run test
 
   build:

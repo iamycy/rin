@@ -85,7 +85,7 @@ def smooth_pitch(
     ------
     ValueError
         If ``f0``/``strength`` are not 1-D of equal length, if an edge from
-        the estimator references a frame beyond the end of ``f0``, or if
+        the estimator references a frame outside ``[0, len(f0))``, or if
         ``f0`` is longer than the ``hop_length`` grid allows.
     """
     f0 = np.asarray(f0, dtype=float)
@@ -94,19 +94,20 @@ def smooth_pitch(
         raise ValueError("f0 and strength must be 1-D arrays of the same length")
 
     edges, estimates, confidences = difference_estimator(x, sr, hop_length, hops)
-    # ``f0`` must sit on the estimator's frame grid: no edge may point past
-    # its end (it would be silently dropped downstream), and it may not be
+    # ``f0`` must sit on the estimator's frame grid: every edge must index
+    # into it (an out-of-range one is silently dropped downstream), and it
+    # may not be
     # longer than the hop grid holds (e.g. computed at a different
     # hop_length). Not an equality check against ``edges.max() + 1`` -- that
     # is only a lower bound, since an estimator may leave trailing frames
     # unconnected, so it would reject a correctly sized ``f0``.
     n_samples = np.shape(x)[-1]
     grid_frames = 1 + n_samples // hop_length
-    if edges.size and int(edges.max()) >= len(f0):
+    if edges.size and (int(edges.max()) >= len(f0) or int(edges.min()) < 0):
+        bad = int(edges.max()) if int(edges.max()) >= len(f0) else int(edges.min())
         raise ValueError(
-            f"the estimator produced an edge referencing frame "
-            f"{int(edges.max())} but f0 has only {len(f0)} frames; "
-            "both must use the same hop_length grid"
+            f"the estimator produced an edge referencing frame {bad}, outside "
+            f"[0, {len(f0)}); both must use the same hop_length grid"
         )
     if len(f0) > grid_frames:
         raise ValueError(

@@ -161,3 +161,17 @@ def test_out_of_range_edges_from_estimator_rejected():
         smooth_pitch(
             x, noisy_cents, strength, SR, HOP, difference_estimator=overshooting_estimator
         )
+
+
+def test_negative_edge_endpoints_rejected():
+    # The lower half of the grid check: a negative endpoint is dropped just as
+    # silently by _edge_keep_mask as an overshooting one, so it must fail loudly.
+    x, _, noisy_cents, strength = _noisy_chirp()
+    n_frames = len(noisy_cents)
+
+    def negative_estimator(x_, sr_, hop_, hops_):
+        u = np.arange(-1, n_frames - 2)
+        return np.stack([u, u + 1], axis=1), np.zeros(len(u)), np.ones(len(u))
+
+    with pytest.raises(ValueError, match=r"referencing frame -1, outside"):
+        smooth_pitch(x, noisy_cents, strength, SR, HOP, difference_estimator=negative_estimator)

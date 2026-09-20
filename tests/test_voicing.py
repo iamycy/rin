@@ -76,3 +76,67 @@ def test_invalid_inputs_fail_fast():
         bad = abs_conf.copy()
         bad[0] = np.inf
         estimate_voicing(bad, edges, rel_conf)
+
+
+def _sparse_voicing(abs_confidences, rel_edges, rel_confidences):
+    """Reference: the sparse-adjacency form estimate_voicing was built from.
+
+    Kept as an oracle for the np.bincount accumulation that replaced it, the
+    way test_lp.py keeps an explicit primal LP for the dual solver.
+    """
+    from scipy.sparse import csr_matrix
+
+    M = len(abs_confidences)
+    keep = np.all((rel_edges >= 0) & (rel_edges < M), axis=1) & (rel_confidences > 0)
+    e, c = rel_edges[keep], rel_confidences[keep]
+    d = 1.0 / np.maximum(np.abs(e[:, 1] - e[:, 0]), 1).astype(float) ** 2
+    num_s = csr_matrix((d * c**2, (e[:, 0], e[:, 1])), shape=(M, M))
+    den_s = csr_matrix((d, (e[:, 0], e[:, 1])), shape=(M, M))
+    num = (num_s + num_s.T).sum(axis=1).A1
+    den = (den_s + den_s.T).sum(axis=1).A1
+    rms = np.sqrt(np.divide(num, np.maximum(den, 1e-10)))
+    return np.sqrt(np.clip(abs_confidences, 0.0, 1.0) * np.clip(rms, 0.0, 1.0))
+
+
+def test_bincount_matches_the_sparse_form():
+    """The endpoint accumulation must equal the sparse form it replaced,
+    including duplicate edges, self-loops and backward edges."""
+    rng = np.random.default_rng(7)
+    for _ in range(50):
+        M = int(rng.integers(1, 30))
+        E = int(rng.integers(0, 3 * M))
+        edges = np.stack([rng.integers(0, M, E), rng.integers(0, M, E)], axis=1)
+        rel_conf = rng.uniform(0.0, 1.0, E)
+        abs_conf = rng.uniform(0.0, 1.0, M)
+        np.testing.assert_allclose(
+            estimate_voicing(abs_conf, edges, rel_conf),
+            _sparse_voicing(abs_conf, edges, rel_conf),
+            rtol=1e-12,
+            atol=1e-12,
+        )
+
+
+def test_relative_evidence_is_undirected():
+    # An edge is evidence for the frames at both ends, whichever way round it
+    # was given, so direction and redundant listings must not move the result.
+    M = 6
+    fwd = np.stack([np.arange(M - 1), np.arange(1, M)], axis=1)
+    rev = fwd[:, ::-1].copy()
+    conf = np.full(M - 1, 0.5)
+    abs_conf = np.full(M, 1.0)
+    ref = estimate_voicing(abs_conf, fwd, conf)
+
+    np.testing.assert_allclose(estimate_voicing(abs_conf, rev, conf), ref)
+    for redundant in (np.concatenate([fwd, fwd]), np.concatenate([fwd, rev])):
+        np.testing.assert_allclose(
+            estimate_voicing(abs_conf, redundant, np.concatenate([conf, conf])), ref
+        )
+
+
+def test_self_loop_is_well_behaved():
+    # A self-loop adds its weight to both "ends" of the same frame, so it
+    # stays in range rather than double-counting into nonsense.
+    voicing = estimate_voicing(np.ones(3), np.array([[1, 1]]), np.array([0.64]))
+    assert bool(((voicing >= 0) & (voicing <= 1)).all())
+    np.testing.assert_allclose(voicing[1], 0.8)  # sqrt(1.0 * 0.64)
+    np.testing.assert_allclose(voicing[[0, 2]], 0.0)  # no incident edges
