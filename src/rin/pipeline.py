@@ -100,7 +100,10 @@ def smooth_pitch(
     # longer than the hop grid holds (e.g. computed at a different
     # hop_length). Not an equality check against ``edges.max() + 1`` -- that
     # is only a lower bound, since an estimator may leave trailing frames
-    # unconnected, so it would reject a correctly sized ``f0``.
+    # unconnected, so it would reject a correctly sized ``f0``. When there are
+    # no edges at all, though, nothing constrains ``f0`` from below -- the
+    # upper-bound check on edges is what does that in the general case -- so
+    # the hop grid is required exactly.
     n_samples = np.shape(x)[-1]
     grid_frames = 1 + n_samples // hop_length
     if edges.size and (int(edges.max()) >= len(f0) or int(edges.min()) < 0):
@@ -109,10 +112,10 @@ def smooth_pitch(
             f"the estimator produced an edge referencing frame {bad}, outside "
             f"[0, {len(f0)}); both must use the same hop_length grid"
         )
-    if len(f0) > grid_frames:
+    if len(f0) > grid_frames or (not edges.size and len(f0) != grid_frames):
         raise ValueError(
             f"f0 has {len(f0)} frames but hop_length={hop_length} over "
-            f"{n_samples} samples allows at most {grid_frames}; "
+            f"{n_samples} samples gives {grid_frames}; "
             "both must use the same hop_length grid"
         )
 

@@ -28,6 +28,6 @@ default = ["dev"]
 [tasks]
 test = { cmd = "pytest -v", description = "Run the test suite" }
 lint = { cmd = "ruff check src tests", description = "Lint with ruff" }
-docstrings = { cmd = "python -m numpydoc.hooks.validate_docstrings src/rin", description = "Validate public docstrings against numpydoc" }
+docstrings = { cmd = "python -m numpydoc lint src/rin/*.py", description = "Validate public docstrings against numpydoc" }
 format = { cmd = "ruff format src tests", description = "Format with ruff" }
 build = { cmd = "python -m build", description = "Build sdist and wheel" }

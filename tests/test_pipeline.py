@@ -175,3 +175,24 @@ def test_negative_edge_endpoints_rejected():
 
     with pytest.raises(ValueError, match=r"referencing frame -1, outside"):
         smooth_pitch(x, noisy_cents, strength, SR, HOP, difference_estimator=negative_estimator)
+
+
+def test_edgeless_estimator_still_requires_the_full_grid():
+    # With edges present, a too-short f0 is caught because some edge indexes
+    # past its end. With no edges nothing constrains it from below, so the hop
+    # grid is required exactly rather than silently accepting any shorter f0.
+    x, _, noisy_cents, strength = _noisy_chirp()
+
+    def edgeless_estimator(x_, sr_, hop_, hops_):
+        return np.zeros((0, 2), dtype=int), np.zeros(0), np.zeros(0)
+
+    f0_smooth, _ = smooth_pitch(
+        x, noisy_cents, strength, SR, HOP, difference_estimator=edgeless_estimator
+    )
+    assert f0_smooth.shape == noisy_cents.shape
+
+    with pytest.raises(ValueError, match="both must use the same hop_length grid"):
+        smooth_pitch(
+            x, noisy_cents[:-3], strength[:-3], SR, HOP,
+            difference_estimator=edgeless_estimator,
+        )

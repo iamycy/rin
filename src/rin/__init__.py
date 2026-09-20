@@ -1,4 +1,4 @@
-"""rin-pitch: Relative Interval Network (RIN) pitch smoothing.
+"""Relative Interval Network (RIN) pitch smoothing.
 
 Three core functions, arrays in / arrays out:
 

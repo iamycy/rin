@@ -59,23 +59,30 @@ smooth_cents = lp_smoother(f0_cents, abs_conf, edges, estimates, confidences)
 voicing = estimate_voicing(abs_conf, edges, confidences)
 ```
 
-Arrays in, arrays out -- the package does no file loading and no caching. Each caller wires their own pipeline (and their own VQT caching) around the three cores.
+Arrays in, arrays out -- the package does no file loading and no caching.
+Each caller wires their own pipeline (and their own VQT caching) around the three cores.
 
 ## API
 
 One high-level function plus three cores:
 
-- `rin.smooth_pitch(x, f0, strength, sr, hop_length, hops=(1, 2, 3, 5), ...)` -- the paper's pipeline in one call: VQT relative diffs, dual LP fusion, and voicing. `f0` in cents with NaN = unvoiced; returns `(f0_smooth, voicing)` in cents. Each stage is swappable via `difference_estimator`, `solver`, and `voicing_estimator` keyword arguments (any callable obeying the `rin.interfaces` contracts); configure a stage with `functools.partial`, e.g. `difference_estimator=partial( vqt_diff_calculator, max_diff_cents=500.0)`.
+- `rin.smooth_pitch(x, f0, strength, sr, hop_length, hops=(1, 2, 3, 5), ...)` -- the paper's pipeline in one call: VQT relative diffs, dual LP fusion, and voicing.
+  `f0` in cents with NaN = unvoiced; returns `(f0_smooth, voicing)` in cents.
+  Each stage is swappable via `difference_estimator`, `solver`, and `voicing_estimator` keyword arguments (any callable obeying the `rin.interfaces` contracts); configure a stage with `functools.partial`, e.g. `difference_estimator=partial( vqt_diff_calculator, max_diff_cents=500.0)`.
 
 Three core functions (for custom wiring):
 
-- `rin.vqt_diff_calculator(x, sr, hop_length, hops=(1,), ...)` -- multi-hop relative pitch differences (cents) with confidences. Uses the paper's fixed estimation path: Pearson (mean-subtracted) normalized cross-correlation of VQT magnitude slices with the arcsin x peak2mean confidence weighting. `max_diff_cents` (600), `bins_per_octave` (36), `n_bins` (252), and other VQT options are plain kwargs -- pass your own.
+- `rin.vqt_diff_calculator(x, sr, hop_length, hops=(1,), ...)` -- multi-hop relative pitch differences (cents) with confidences.
+  Uses the paper's fixed estimation path: Pearson (mean-subtracted) normalized cross-correlation of VQT magnitude slices with the arcsin x peak2mean confidence weighting.
+  `max_diff_cents` (600), `bins_per_octave` (36), `n_bins` (252), and other VQT options are plain kwargs -- pass your own.
 - `rin.lp_smoother(abs_estimates, abs_confidences, rel_edges, rel_estimates, rel_confidences)` -- network-flow LP fusion (dual min-cost circulation, HiGHS); absolute and relative estimates must share one pitch domain (caller's choice, e.g. cents).
 - `rin.estimate_voicing(abs_confidences, rel_edges, rel_confidences)` -- per-frame voicing probabilities from the two confidence streams.
 
 ## Plugins
 
-Each core is a plain function obeying a contract in `rin.interfaces` (`DifferenceEstimator`, `Solver`, and `VoicingEstimator` are `Callable` type aliases). Implement your own function with the same signature and pass it to `smooth_pitch` -- or call it directly in your own wiring. No classes or inheritance needed; any callable (function, lambda, `functools.partial`, callable object) works:
+Each core is a plain function obeying a contract in `rin.interfaces` (`DifferenceEstimator`, `Solver`, and `VoicingEstimator` are `Callable` type aliases).
+  Implement your own function with the same signature and pass it to `smooth_pitch` -- or call it directly in your own wiring.
+  No classes or inheritance needed; any callable (function, lambda, `functools.partial`, callable object) works:
 
 ```python
 from functools import partial
