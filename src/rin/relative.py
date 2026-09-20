@@ -4,6 +4,9 @@ For each hop ``m`` in a hop set, every frame pair ``(n, n+m)`` is scored by
 normalized cross-correlation of their VQT magnitude slices over a bounded
 pitch-shift window; the peak (with parabolic interpolation) gives the relative
 pitch difference in cents, and the peak's shape gives a confidence weight.
+
+The estimation path is fixed -- see :func:`vqt_diff_calculator` -- and only
+the VQT's shape is a parameter.
 """
 
 from collections.abc import Sequence
@@ -12,19 +15,32 @@ from operator import index as _index
 import numpy as np
 from librosa import vqt
 
-from ._utils import parabolic_interpolation
-
-# --------------------------------------------------------------------------
-# Fixed estimation path (the paper's reported setup)
-# --------------------------------------------------------------------------
-
+# The paper's reported VQT settings.
 VQT_N_BINS = 252
 VQT_BINS_PER_OCT = 36
 MAX_DIFF_CENTS = 600.0
 
-# Pearson (mean-subtracted) normalized cross-correlation of VQT magnitude
-# slices; confidence weighting is arcsin (dot-based) x peak2mean
-# (flatness-based). These are not configurable -- this is the paper's path.
+
+def _parabolic_interpolation(a, b, c):
+    """Interpolate a peak over the three-point stencil ``(-1, 0, +1)``.
+
+    Returns the interpolated peak value and its offset from the center bin.
+
+    Notes
+    -----
+    Kept local on purpose: librosa's equivalent (``_parabolic_interpolation``
+    in ``librosa.core.pitch``) is private, takes the full array instead of a
+    stencil triple, and has different edge semantics, so it is not a drop-in
+    replacement.
+    """
+    denom = a - 2 * b + c
+    offset = np.divide(
+        0.5 * (a - c),
+        denom,
+        out=np.zeros_like(denom, dtype=float),
+        where=np.abs(denom) > 1e-10,
+    )
+    return b - 0.25 * (a - c) * offset, offset
 
 
 def _dot_weight(corr_max: np.ndarray) -> np.ndarray:
@@ -54,8 +70,8 @@ def compute_vqt(
 
     Parameters
     ----------
-    x : np.ndarray [shape=(..., n)]
-        Mono input audio signal.
+    x : np.ndarray [shape=(n,)]
+        Mono (1-D) input audio signal.
     sr : int
         Sample rate in Hz.
     hop_length : int
@@ -69,7 +85,7 @@ def compute_vqt(
 
     Returns
     -------
-    V : np.ndarray [shape=(n_bins, n_frames)]
+    np.ndarray [shape=(n_bins, n_frames)]
         Magnitude VQT spectrogram.
     """
     return np.abs(
@@ -189,15 +205,23 @@ def hop_diff(
     idx = np.argmax(dots, axis=0)
     hit_boundary = (idx == 0) | (idx == dots.shape[0] - 1)
 
+    # At a boundary peak, idx - 1 == -1 indexes from the far end of the shift
+    # axis, so the stencil is not a neighbourhood of the peak. Harmless: both
+    # of its consumers are zeroed at hit_boundary -- p just below, and
+    # diff_probs further down.
     abc = -np.take_along_axis(
         dots,
         np.minimum(np.stack([idx - 1, idx, idx + 1], axis=0), dots.shape[0] - 1),
         axis=0,
     )
-    interpolated_dot, p = parabolic_interpolation(*abc)
+    interpolated_dot, p = _parabolic_interpolation(*abc)
+    # Keeps every estimate inside the +-max_diff_cents window: a boundary
+    # peak's parabola fit is meaningless, so drop the sub-bin offset and
+    # report the search limit itself. These edges are zero-weighted, so this
+    # only affects what a custom solver sees.
+    p = np.where(hit_boundary, 0.0, p)
 
     pitch_diffs = -(idx + p - max_diff_bins) * diff_unit
-    # fixed paper weighting: arcsin (dot-based) x peak2mean (flatness-based)
     corr_max = -interpolated_dot
     diff_probs = _dot_weight(corr_max) * _flat_weight(dots, corr_max)
     diff_probs[hit_boundary] = 0
@@ -224,8 +248,8 @@ def vqt_diff_calculator(
 
     Parameters
     ----------
-    x : np.ndarray [shape=(..., n)]
-        Mono input audio signal.
+    x : np.ndarray [shape=(n,)]
+        Mono (1-D) input audio signal.
     sr : int
         Sample rate in Hz.
     hop_length : int
@@ -255,7 +279,8 @@ def vqt_diff_calculator(
     ValueError
         If ``x`` is not a mono (1-D) waveform, ``hops`` is empty or contains
         non-positive values, ``bins_per_octave`` is not positive, or
-        ``max_diff_cents`` allows less than one VQT bin of search.
+        ``max_diff_cents`` allows less than one VQT bin of search or more
+        than ``n_bins`` of it.
     """
     x = np.asarray(x, dtype=float)
     if x.ndim != 1:
@@ -277,13 +302,21 @@ def vqt_diff_calculator(
     max_diff_bins = int(max_diff_cents / diff_unit)
     if max_diff_bins < 1:
         raise ValueError("max_diff_cents must allow at least one VQT bin of search")
+    if max_diff_bins >= V.shape[0]:
+        # K_tau = n_bins - |shift| is a division denominator in the Pearson
+        # normalization; once the search radius reaches n_bins it hits zero and
+        # the correlations come back NaN.
+        raise ValueError(
+            f"max_diff_cents={max_diff_cents} needs a search radius of "
+            f"{max_diff_bins} bins but the VQT has only {V.shape[0]}; "
+            "increase n_bins or reduce max_diff_cents"
+        )
 
     setup = _vqt_xcorr_setup(V, max_diff_bins)
 
     diff_pitch_estimates = []
     diff_pitch_confidences = []
     edges = []
-    # iterate through hop differences to calculate pitch differences
     for jump in hops:
         hop_edges, pitch_diffs, diff_probs = hop_diff(
             V,

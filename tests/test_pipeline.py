@@ -124,3 +124,75 @@ def test_smooth_pitch_custom_solver_replaces_lp():
     voiced = np.isfinite(noisy_cents)
     expected = np.where(voiced, noisy_cents, 0.0)
     np.testing.assert_allclose(f0_smooth, expected, rtol=1e-12)
+
+
+def test_estimator_may_leave_trailing_frames_unconnected():
+    # Regression: the frame count was inferred as edges.max() + 1, which is
+    # only a lower bound. An estimator that leaves trailing frames unconnected
+    # (one needing lookahead, say) made a correctly sized f0 fail with a
+    # misleading "both must use the same hop_length grid".
+    x, _, noisy_cents, strength = _noisy_chirp()
+    n_frames = len(noisy_cents)
+
+    def lookahead_estimator(x_, sr_, hop_, hops_):
+        # conforms to DifferenceEstimator but never references the last 3 frames
+        u = np.arange(n_frames - 4)
+        return np.stack([u, u + 1], axis=1), np.zeros(len(u)), np.ones(len(u))
+
+    f0_smooth, voicing = smooth_pitch(
+        x, noisy_cents, strength, SR, HOP, difference_estimator=lookahead_estimator
+    )
+    assert f0_smooth.shape == (n_frames,)
+    assert voicing.shape == (n_frames,)
+    assert bool(np.isfinite(f0_smooth).all())
+
+
+def test_out_of_range_edges_from_estimator_rejected():
+    # The other half of the grid check: an edge pointing past the end of f0
+    # would be silently dropped by the solver, so it must fail loudly.
+    x, _, noisy_cents, strength = _noisy_chirp()
+    n_frames = len(noisy_cents)
+
+    def overshooting_estimator(x_, sr_, hop_, hops_):
+        u = np.arange(n_frames)
+        return np.stack([u, u + 1], axis=1), np.zeros(n_frames), np.ones(n_frames)
+
+    with pytest.raises(ValueError, match="edge referencing frame"):
+        smooth_pitch(
+            x, noisy_cents, strength, SR, HOP, difference_estimator=overshooting_estimator
+        )
+
+
+def test_negative_edge_endpoints_rejected():
+    # The lower half of the grid check: a negative endpoint is dropped just as
+    # silently by _edge_keep_mask as an overshooting one, so it must fail loudly.
+    x, _, noisy_cents, strength = _noisy_chirp()
+    n_frames = len(noisy_cents)
+
+    def negative_estimator(x_, sr_, hop_, hops_):
+        u = np.arange(-1, n_frames - 2)
+        return np.stack([u, u + 1], axis=1), np.zeros(len(u)), np.ones(len(u))
+
+    with pytest.raises(ValueError, match=r"referencing frame -1, outside"):
+        smooth_pitch(x, noisy_cents, strength, SR, HOP, difference_estimator=negative_estimator)
+
+
+def test_edgeless_estimator_still_requires_the_full_grid():
+    # With edges present, a too-short f0 is caught because some edge indexes
+    # past its end. With no edges nothing constrains it from below, so the hop
+    # grid is required exactly rather than silently accepting any shorter f0.
+    x, _, noisy_cents, strength = _noisy_chirp()
+
+    def edgeless_estimator(x_, sr_, hop_, hops_):
+        return np.zeros((0, 2), dtype=int), np.zeros(0), np.zeros(0)
+
+    f0_smooth, _ = smooth_pitch(
+        x, noisy_cents, strength, SR, HOP, difference_estimator=edgeless_estimator
+    )
+    assert f0_smooth.shape == noisy_cents.shape
+
+    with pytest.raises(ValueError, match="both must use the same hop_length grid"):
+        smooth_pitch(
+            x, noisy_cents[:-3], strength[:-3], SR, HOP,
+            difference_estimator=edgeless_estimator,
+        )

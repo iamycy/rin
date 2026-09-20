@@ -29,33 +29,10 @@ def _validate_edge_inputs(
     rel_edges: np.ndarray,
     rel_confidences: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, int]:
-    """Validate the confidence and edge inputs shared by both cores.
+    """Validate and normalize the inputs shared by both cores.
 
-    Parameters
-    ----------
-    abs_confidences : np.ndarray [shape=(M,)]
-        Confidence/weight of each absolute estimate.
-    rel_edges : np.ndarray [shape=(E, 2)]
-        Frame-index pairs ``(u, v)`` for each relative edge.
-    rel_confidences : np.ndarray [shape=(E,)]
-        Confidence/weight of each relative estimate.
-
-    Returns
-    -------
-    abs_confidences : np.ndarray [shape=(M,)]
-        Normalized absolute confidences.
-    rel_edges : np.ndarray [shape=(E, 2)]
-        Normalized integer edge array.
-    rel_confidences : np.ndarray [shape=(E,)]
-        Normalized relative confidences.
-    M : int
-        Number of frames.
-
-    Raises
-    ------
-    ValueError
-        If shapes disagree, values are non-finite, confidences are negative,
-        or ``rel_edges`` is not an ``(E, 2)`` integer array.
+    Returns ``(abs_confidences, rel_edges, rel_confidences, M)``. The contract
+    it enforces is documented on the two public functions that call it.
     """
     abs_confidences = np.asarray(abs_confidences, dtype=float)
     rel_confidences = np.asarray(rel_confidences, dtype=float)
@@ -101,7 +78,7 @@ def estimate_voicing(
 
     Returns
     -------
-    voicing : np.ndarray [shape=(M,)]
+    np.ndarray [shape=(M,)]
         Voicing probabilities in [0, 1].
 
     Raises
@@ -123,21 +100,16 @@ def estimate_voicing(
     rel_edges = rel_edges[keep]
     rel_confidences = rel_confidences[keep]
 
-    hops = np.maximum(np.abs(rel_edges[:, 1] - rel_edges[:, 0]), 1)
-    d = 1.0 / (hops.astype(float) ** 2)
-    num_sparse = csr_matrix(
-        (d * (rel_confidences**2), (rel_edges[:, 0], rel_edges[:, 1])), shape=(M, M)
-    )
-    num_sym = num_sparse + num_sparse.T
-    num = num_sym.sum(axis=1).A1
-
-    den_sparse = csr_matrix((d, (rel_edges[:, 0], rel_edges[:, 1])), shape=(M, M))
-    den_sym = den_sparse + den_sparse.T
-    den = den_sym.sum(axis=1).A1
+    # Accumulate every edge onto both of its endpoints: an edge is evidence
+    # for the frames at both ends, whichever way round it was given.
+    u, v = rel_edges[:, 0], rel_edges[:, 1]
+    d = 1.0 / np.maximum(np.abs(v - u), 1).astype(float) ** 2
+    weighted = d * rel_confidences**2
+    num = np.bincount(u, weighted, minlength=M) + np.bincount(v, weighted, minlength=M)
+    den = np.bincount(u, d, minlength=M) + np.bincount(v, d, minlength=M)
 
     rel_rms = np.sqrt(np.divide(num, np.maximum(den, 1e-10)))
-    voicing = np.sqrt(np.clip(abs_confidences, 0.0, 1.0) * np.clip(rel_rms, 0.0, 1.0))
-    return voicing
+    return np.sqrt(np.clip(abs_confidences, 0.0, 1.0) * np.clip(rel_rms, 0.0, 1.0))
 
 
 def lp_smoother(
@@ -169,7 +141,7 @@ def lp_smoother(
 
     Returns
     -------
-    smooth_pitch : np.ndarray [shape=(M,)]
+    np.ndarray [shape=(M,)]
         Smoothed pitch contour.
 
     Raises
@@ -186,7 +158,6 @@ def lp_smoother(
     -----
     Edges referencing frames outside ``[0, M)`` are dropped, as are
     zero-weight edges (they cannot bind the optimum in either form).
-    Voicing is a separate concern -- see :func:`estimate_voicing`.
     """
     abs_estimates = np.asarray(abs_estimates, dtype=float)
     rel_estimates = np.asarray(rel_estimates, dtype=float)
@@ -212,28 +183,19 @@ def lp_smoother(
     abs_conf_lp = np.maximum(abs_confidences, 1e-6)
     E = len(rel_estimates)
 
-    # Dual network flow formulation (equivalent to circulation network simplex):
-    # Solves the Lagrangian dual on an augmented graph with an auxiliary ground
-    # node (g). B is the M x (M+E) node-arc incidence matrix (flow conservation
-    # at each frame node).
-    # - Arcs 0..M-1 connect ground node -> node i (carrying observed absolute pitch).
-    # - Arcs M..M+E-1 connect node u -> node v (carrying relative pitch differences).
-    # By LP strong duality, the Lagrange multipliers of the node conservation
-    # constraints B y = 0 (-res.eqlin.marginals) are the optimal node potentials (f).
+    # B is the M x (M+E) node-arc incidence matrix (flow conservation per frame):
+    #   arcs 0..M-1    ground -> node i, carrying the absolute estimates
+    #   arcs M..M+E-1  node u -> node v, carrying the relative differences
+    # By strong duality the multipliers of B y = 0 (-res.eqlin.marginals) are
+    # the optimal node potentials, i.e. the smoothed contour.
     num_arcs = M + E
     all_deltas = np.concatenate([abs_estimates, rel_estimates])
     all_weights = np.concatenate([abs_conf_lp, rel_confidences])
 
-    if E > 0:
-        rel_cols = np.arange(M, num_arcs)
-        rows = np.concatenate([np.arange(M), rel_edges[:, 0], rel_edges[:, 1]])
-        cols = np.concatenate([np.arange(M), rel_cols, rel_cols])
-        data = np.concatenate([np.ones(M), -np.ones(E), np.ones(E)])
-    else:
-        rows = np.arange(M)
-        cols = np.arange(M)
-        data = np.ones(M)
-
+    rel_cols = np.arange(M, num_arcs)
+    rows = np.concatenate([np.arange(M), rel_edges[:, 0], rel_edges[:, 1]])
+    cols = np.concatenate([np.arange(M), rel_cols, rel_cols])
+    data = np.concatenate([np.ones(M), -np.ones(E), np.ones(E)])
     B = csr_matrix((data, (rows, cols)), shape=(M, num_arcs))
     bounds = list(zip(-all_weights, all_weights))
     res = linprog(

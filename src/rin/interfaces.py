@@ -26,8 +26,8 @@ Signature: ``(x, sr, hop_length, hops) -> (edges, estimates, confidences)``.
 
 Parameters
 ----------
-x : np.ndarray [shape=(..., n)]
-    Mono input audio.
+x : np.ndarray [shape=(n,)]
+    Mono (1-D) input audio.
 sr : int
     Sample rate in Hz.
 hop_length : int

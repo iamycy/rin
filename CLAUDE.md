@@ -1,0 +1,133 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project
+
+`rin-pitch` — reference implementation for "Pitch Smoothing Using Relative Interval Networks" (ICASSP 2027).
+It fuses per-frame absolute F0 estimates (from any external tracker) with multi-hop relative pitch differences estimated from a magnitude VQT, via a network-flow linear program.
+
+## Commands
+
+Development runs through [pixi](https://pixi.sh) (the `default` environment includes the `dev` feature):
+
+```sh
+pixi install
+pixi run test          # pytest -v
+pixi run lint          # ruff check src tests
+pixi run format        # ruff format src tests
+pixi run build         # python -m build (sdist + wheel)
+pixi run docstrings    # numpydoc validation of the public API
+```
+
+Run a single test or file:
+
+```sh
+pixi run pytest tests/test_lp.py -v
+pixi run pytest tests/test_lp.py::test_dual_matches_primal -v
+pixi run pytest -k voicing -v
+```
+
+CI (`.github/workflows/ci.yml`) runs `lint` + `test` on Linux, macOS, and Windows, plus a `build` job.
+Pushing a `v*` tag triggers `release.yml`, which lints, tests, builds, and publishes to PyPI via trusted publishing.
+
+Ruff config lives in `pyproject.toml`: line length 100, rules `E, F, W, I, UP`.
+
+## Conventions
+
+**Docstrings are numpydoc.** Enforced two ways: ruff's `D` rules with `convention = "numpy"` (tests are exempt via `per-file-ignores` — test names describe themselves), and `pixi run docstrings`, configured by `[tool.numpydoc_validation]` in `pyproject.toml`.
+Private helpers are excluded there and keep a one-line summary by design; do not give them full Parameters/Returns blocks.
+Note numpydoc names a return value only when a function returns *several* — single-return functions document the bare type (`RT02`).
+
+**Markdown files are never hard-wrapped.** One complete sentence per source line, however long — `README.md` and this file included.
+Never reflow them to a column limit: the `line-length = 100` in `pyproject.toml` is Ruff's and governs Python only.
+Sentence-per-line keeps diffs tight, since rewording one sentence touches one line.
+Code fences, tables and list markers are unaffected; it is prose that stays unbroken.
+
+## Architecture
+
+Three core functions plus one pipeline that chains them.
+Arrays in, arrays out — **no file loading, no caching, no classes, no registry**.
+This is deliberate: callers wire their own pipeline (and their own VQT caching) around the cores.
+
+| Module | Role |
+| --- | --- |
+| [src/rin/relative.py](src/rin/relative.py) | `vqt_diff_calculator` — multi-hop relative pitch differences from audio |
+| [src/rin/lp.py](src/rin/lp.py) | `lp_smoother` (LP fusion) and `estimate_voicing` |
+| [src/rin/pipeline.py](src/rin/pipeline.py) | `smooth_pitch` — chains the three stages with the paper's defaults |
+| [src/rin/interfaces.py](src/rin/interfaces.py) | `Callable` type aliases documenting the three stage contracts |
+
+### Plugin model
+
+`DifferenceEstimator`, `Solver`, and `VoicingEstimator` in `interfaces.py` are `typing.Callable` aliases, not base classes.
+Any callable with the right positional signature works (function, lambda, `functools.partial`, callable object).
+`smooth_pitch` takes no stage-specific kwargs by design — configure a stage with `functools.partial`, e.g. `difference_estimator=partial(vqt_diff_calculator, max_diff_cents=500.0)`.
+`tests/test_interfaces.py` asserts the built-in cores' parameter names match the documented contracts, so renaming a core's positional parameters is a breaking change and will fail there.
+
+### Invariants that cut across modules
+
+- **Pitch domain is never converted.** `abs_estimates` and `rel_estimates` must already share one domain; the output is in that same domain.
+  The built-in estimator emits cents, so `smooth_pitch` documents cents in / cents out, but `lp_smoother` itself is domain-agnostic.
+  Hz↔cents conversion is the caller's responsibility and must not be added inside the package.
+- **`f0` defines the frame grid.** `smooth_pitch` treats `len(f0)` as authoritative and bounds it from two sides: every edge must index into it — an endpoint outside `[0, len(f0))` is silently dropped downstream, so it is rejected up front, and `len(f0)` may not exceed `1 + n_samples // hop_length` (which catches an `f0` computed at a different hop).
+  It is deliberately *not* an equality check against `edges.max() + 1` — that is only a lower bound on the frame count, and an estimator may legitimately leave trailing frames unconnected.
+- **Unvoiced frames are expressed as zero absolute confidence,** not as a separate mask.
+  `smooth_pitch` maps non-finite `f0` to `abs_est = 0.0, abs_conf = 0.0`, and the LP positions those frames from the relative edges.
+  (The `1e-6` weight floor in `lp_smoother` leaves a residual pull toward `0.0`, negligible beside real edge weights.)
+- **Relative evidence is undirected.** `estimate_voicing` accumulates each edge onto *both* endpoints (`np.bincount` over `u` and over `v`), so edge direction, duplicate edges and self-loops all fall out correctly with no special-casing.
+  It was built from two `M × M` sparse adjacency matrices before; `tests/test_voicing.py` keeps that form as `_sparse_voicing` and asserts equivalence on random adversarial graphs, the way `test_lp.py` keeps a primal LP for the dual solver.
+  `bincount` is ~10× faster, so don't reintroduce the sparse version.
+- **Edge filtering is shared.** `_edge_keep_mask` in `lp.py` drops out-of-range and zero-confidence edges, and both `lp_smoother` and `estimate_voicing` apply it, so the two stages always see the same edge set.
+
+### LP formulation (the subtle part)
+
+`lp_smoother` solves the weighted L1 problem
+
+```
+min_f  Σ_n w_n |f[n] − a[n]| + Σ_(u,v)∈E w_uv |f[v] − f[u] − d_uv|
+```
+
+by solving its **Lagrangian dual** — a min-cost circulation on a graph with one auxiliary ground node — instead of the primal.
+  Consequences when editing:
+
+- `B` is the `M × (M+E)` node-arc incidence matrix: arcs `0..M-1` are ground→node (absolute terms), arcs `M..M+E-1` are `u→v` (relative terms).
+- The objective is `c = -all_deltas` and the answer is `-res.eqlin.marginals` (node potentials).
+  Both sign flips are load-bearing; changing one without the other silently negates the contour.
+- Arc bounds are `(-w, +w)`; absolute weights are floored at `1e-6` because exact zeros pin the ground arcs and make the circulation degenerate.
+- `tests/test_lp.py` contains `_primal_smoother`, an explicit primal LP with slack variables, used as the reference oracle for the dual.
+  Any change to the dual formulation must keep that equivalence test passing.
+
+### VQT relative estimation
+
+`relative.py` implements one fixed estimation path — the paper's — and it is intentionally not configurable: Pearson (mean-subtracted) normalized cross-correlation of VQT magnitude slices, with confidence = `arcsin` dot weight × `peak2mean` flatness weight (`_dot_weight` × `_flat_weight`).
+  VQT shape parameters (`bins_per_octave=36`, `n_bins=252`, `max_diff_cents=600`) and extra `librosa.vqt` kwargs are plain arguments.
+  The paper's hop set is `HOPS = (1, 2, 3, 5)`, exported from `rin`.
+
+Performance structure: `compute_vqt` and `_vqt_xcorr_setup` are factored out because the padded VQT, sliding-window view, and window norms depend only on `(V, max_diff_bins)` — not on the hop — so they are computed once per clip and passed into every `hop_diff` call.
+  Keep new per-hop work out of the setup and vice versa.
+
+Peak picking rectifies correlations before `argmax`; frames whose peak lands on the search boundary get zero confidence via `hit_boundary`, which also covers the all-negative-column collapse to index 0.
+  Dropping the sub-bin offset at boundary peaks (`p = np.where(hit_boundary, 0.0, p)`) is what keeps every returned estimate inside the ±`max_diff_cents` window.
+  The stencil around a boundary peak is not a neighbourhood of it (`idx - 1 == -1` indexes from the far end), which is harmless only because both consumers of that stencil — `p` and `diff_probs` — are zeroed at `hit_boundary`.
+  `max_diff_cents` is validated from both sides: at least one VQT bin of search, and strictly fewer than `n_bins` (at `n_bins` the overlap length `K_tau` hits zero and the correlations go NaN).
+
+## Tests
+
+All tests use synthetic signals (sines, chirps, seeded RNG) — there are no audio fixtures, and tests should stay self-contained that way.
+  Coverage is split by module: `test_lp.py` (dual vs. primal, validation), `test_relative.py` (estimator accuracy on known chirps), `test_voicing.py`, `test_pipeline.py` (end-to-end plus the manual-wiring pattern), `test_interfaces.py` (signature conformance only).
+
+## Release mechanics
+
+**The git tag is the only source of truth for the version — no file in the repo declares one.** `hatch-vcs` derives it from `git describe` at build time, and `rin.__version__` reads the installed metadata through `importlib.metadata`.
+  Releasing is `git tag v1.1.0 && git push --tags`, which triggers `release.yml`.
+  Between tags the version is a dev string such as `0.1.dev18+g6afb39f`, so a working checkout will not show a clean number.
+
+Both workflows check out with `fetch-depth: 0`.
+  This is load-bearing: `hatch-vcs` needs the full history and tags, and the default shallow clone would silently produce a `0.0.0` version and publish it to PyPI.
+
+`pixi build` is deliberately **not** configured (no `[package]` table, no `preview = ["pixi-build"]`).
+  Pixi requires a static `[project] version` and rejects `dynamic = ["version"]` with `There was no version defined for the recipe`, so its build backend is incompatible with tag-derived versioning.
+  Nothing depended on it: CI and release both run `pixi run build` (`python -m build`), and conda-forge builds from the PyPI sdist, whose `PKG-INFO` carries the resolved version.
+
+`conda-recipe/meta.yaml` is prepared but **not submitted** to conda-forge.
+  Its header lists the submission steps, each of which needs explicit approval: the recipe's `sha256` is a placeholder until the first PyPI sdist exists, and per the owner's decision recorded there, PyPI publication is blocked before 2026-09-23.

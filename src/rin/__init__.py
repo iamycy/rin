@@ -1,4 +1,4 @@
-"""rin-pitch: Relative Interval Network (RIN) pitch smoothing.
+"""Relative Interval Network (RIN) pitch smoothing.
 
 Three core functions, arrays in / arrays out:
 
@@ -15,12 +15,17 @@ Bring your own implementations with the same signatures and wire them
 however you like -- this package does no file loading and no caching.
 """
 
+from importlib.metadata import PackageNotFoundError, version
+
 from .interfaces import DifferenceEstimator, Solver, VoicingEstimator
 from .lp import estimate_voicing, lp_smoother
 from .pipeline import HOPS, smooth_pitch
 from .relative import vqt_diff_calculator
 
-__version__ = "1.0.0"
+try:
+    __version__ = version("rin-pitch")
+except PackageNotFoundError:  # pragma: no cover -- source tree with no install
+    __version__ = "0.0.0+unknown"
 
 __all__ = [
     "DifferenceEstimator",
