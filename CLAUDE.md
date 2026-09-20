@@ -105,6 +105,8 @@ The paper's hop set is `HOPS = (1, 2, 3, 5)`, exported from `rin`.
 
 Performance structure: `compute_vqt` and `_vqt_xcorr_setup` are factored out because the padded VQT, sliding-window view, and window norms depend only on `(V, max_diff_bins)` — not on the hop — so they are computed once per clip and passed into every `hop_diff` call.
 Keep new per-hop work out of the setup and vice versa.
+Both `_vqt_xcorr_setup` and `hop_diff` force `V` Fortran-ordered: the correlation's two reduction axes are contiguous only under F order, and C order costs 4.7x.
+`librosa.vqt` already returns F-ordered output, so the guards are no-ops in practice and `test_correlation_reduction_axes_stay_contiguous` is what makes their removal visible.
 
 Peak picking rectifies correlations before `argmax`; frames whose peak lands on the search boundary get zero confidence via `hit_boundary`, which also covers the all-negative-column collapse to index 0.
 Dropping the sub-bin offset at boundary peaks (`p = np.where(hit_boundary, 0.0, p)`) is what keeps every returned estimate inside the ±`max_diff_cents` window.

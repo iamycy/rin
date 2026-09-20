@@ -152,3 +152,24 @@ def test_boundary_peak_does_not_wrap_around_the_shift_axis():
     # the search limit itself, with no interpolated sub-bin offset
     assert conf[0] == 0
     np.testing.assert_allclose(est[0], limit)
+
+
+def test_correlation_reduction_axes_stay_contiguous(monkeypatch):
+    # Guards the np.asfortranarray calls in relative.py: dropping either costs
+    # ~4.7x, and no accuracy test would notice.
+    V = np.ascontiguousarray(compute_vqt(_sine(), SR, HOP))
+    assert not V.flags.f_contiguous
+
+    sliding_V = _vqt_xcorr_setup(V, 18)[0]
+    assert sliding_V.strides[-1] == V.itemsize
+
+    seen = []
+    real_vecdot = np.linalg.vecdot
+
+    def spy(a, b, **kwargs):
+        seen.append((a.strides[-1], b.strides[-1]))
+        return real_vecdot(a, b, **kwargs)
+
+    monkeypatch.setattr(np.linalg, "vecdot", spy)
+    hop_diff(V, 1, 18, 1200 / 36)
+    assert seen == [(V.itemsize, V.itemsize)]

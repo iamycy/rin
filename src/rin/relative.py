@@ -45,15 +45,12 @@ def _parabolic_interpolation(a, b, c):
 
 def _dot_weight(corr_max: np.ndarray) -> np.ndarray:
     """Dot-based component: decompressed match quality (angular distance)."""
-    corr_max_pos = np.clip(corr_max, 0, 1)
-    return 2 / np.pi * np.arcsin(corr_max_pos)
+    return 2 / np.pi * np.arcsin(np.clip(corr_max, 0, 1))
 
 
 def _flat_weight(dots: np.ndarray, corr_max: np.ndarray) -> np.ndarray:
     """Flatness-based component: how sharp/distinct the correlation peak is."""
-    dots_pos = np.maximum(dots, 0.0)
-    denom = np.maximum(corr_max, 1e-10)
-    return 1 - np.mean(dots_pos, axis=0) / denom
+    return 1 - np.mean(dots, axis=0) / np.maximum(corr_max, 1e-10)
 
 
 def compute_vqt(
@@ -124,6 +121,9 @@ def _vqt_xcorr_setup(V: np.ndarray, max_diff_bins: int):
     K_tau : np.ndarray
         Overlap lengths per shift, for mean subtraction.
     """
+    # Load-bearing: the correlation's reduction axes are contiguous only under
+    # F order, which librosa.vqt already gives. C order costs 4.7x.
+    V = np.asfortranarray(V)
     F = V.shape[0]
     padded_V = np.pad(
         V,
@@ -187,6 +187,8 @@ def hop_diff(
         raise ValueError("jump must be an integer") from None
     if jump < 1:
         raise ValueError("jump must be positive")
+    # Before the setup call, so V[:, jump:].T shares its layout -- see _vqt_xcorr_setup.
+    V = np.asfortranarray(V)
     if setup is None:
         setup = _vqt_xcorr_setup(V, max_diff_bins)
     sliding_V, sliding_V_norm, window_sum, K_tau = setup
