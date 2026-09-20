@@ -1,19 +1,13 @@
 """High-level RIN pipeline: the paper's version in one call.
 
-Chains three stages -- a difference estimator, a solver, and a voicing
-estimator -- with the paper's fixed settings by default:
+Chains a difference estimator, a solver and a voicing estimator, defaulting
+to the paper's three:
 
 1. :func:`rin.relative.vqt_diff_calculator` -- Pearson normalized
    cross-correlation of VQT magnitude slices, arcsin x peak2mean confidence
    weighting.
 2. :func:`rin.lp.lp_smoother` -- dual min-cost circulation LP fusion.
 3. :func:`rin.lp.estimate_voicing` -- distance-weighted RMS voicing fusion.
-
-Each stage is an injectable callable obeying the contracts in
-:mod:`rin.interfaces` (any function, lambda, ``functools.partial``, or
-callable object works), so :func:`smooth_pitch` doubles as a swappable
-pipeline: pass your own implementations to replace any stage while keeping
-the one-call convenience.
 
 The package never converts pitch units: absolute and relative estimates
 must share one pitch domain (the built-in estimator outputs cents), and
@@ -56,8 +50,8 @@ def smooth_pitch(
 
     Parameters
     ----------
-    x : np.ndarray [shape=(..., n)]
-        Mono input audio signal.
+    x : np.ndarray [shape=(n,)]
+        Mono (1-D) input audio signal.
     f0 : np.ndarray [shape=(M,)]
         Absolute pitch per frame, in cents; NaN (or inf) marks unvoiced frames.
     strength : np.ndarray [shape=(M,)]
@@ -90,8 +84,9 @@ def smooth_pitch(
     Raises
     ------
     ValueError
-        If ``f0``/``strength`` are not 1-D of equal length, or their length
-        does not match the estimator's frame count.
+        If ``f0``/``strength`` are not 1-D of equal length, if an edge from
+        the estimator references a frame beyond the end of ``f0``, or if
+        ``f0`` is longer than the ``hop_length`` grid allows.
     """
     f0 = np.asarray(f0, dtype=float)
     strength = np.asarray(strength, dtype=float)
@@ -99,19 +94,31 @@ def smooth_pitch(
         raise ValueError("f0 and strength must be 1-D arrays of the same length")
 
     edges, estimates, confidences = difference_estimator(x, sr, hop_length, hops)
-    # The tracker frames must line up 1:1 with the estimator's frames;
-    # out-of-range edges would otherwise be silently dropped downstream.
-    # (With fewer than two frames there are no edges; fall back to the VQT
-    # frame count directly.)
-    n_frames = int(edges.max()) + 1 if edges.size else 1 + len(x) // hop_length
-    if len(f0) != n_frames:
+    # ``f0`` must sit on the estimator's frame grid: no edge may point past
+    # its end (it would be silently dropped downstream), and it may not be
+    # longer than the hop grid holds (e.g. computed at a different
+    # hop_length). Not an equality check against ``edges.max() + 1`` -- that
+    # is only a lower bound, since an estimator may leave trailing frames
+    # unconnected, so it would reject a correctly sized ``f0``.
+    n_samples = np.shape(x)[-1]
+    grid_frames = 1 + n_samples // hop_length
+    if edges.size and int(edges.max()) >= len(f0):
         raise ValueError(
-            f"f0 has {len(f0)} frames but the estimator produced "
-            f"{n_frames}; both must use the same hop_length grid"
+            f"the estimator produced an edge referencing frame "
+            f"{int(edges.max())} but f0 has only {len(f0)} frames; "
+            "both must use the same hop_length grid"
+        )
+    if len(f0) > grid_frames:
+        raise ValueError(
+            f"f0 has {len(f0)} frames but hop_length={hop_length} over "
+            f"{n_samples} samples allows at most {grid_frames}; "
+            "both must use the same hop_length grid"
         )
 
     # Unvoiced (non-finite) frames get zero absolute confidence, so the LP
-    # bridges them through the relative edges alone.
+    # positions them from the relative edges. (``lp_smoother`` floors absolute
+    # weights at 1e-6, leaving a residual pull toward 0.0 that is negligible
+    # beside real edge weights.)
     voiced = np.isfinite(f0)
     abs_est = np.where(voiced, f0, 0.0)
     abs_conf = np.where(voiced, strength, 0.0)

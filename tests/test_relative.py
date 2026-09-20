@@ -91,3 +91,64 @@ def test_hop_diff_rejects_nonpositive_jump():
         hop_diff(V, 0, 18, 1200 / 36)
     with pytest.raises(ValueError, match="jump"):
         hop_diff(V, 1.5, 18, 1200 / 36)
+
+
+def test_max_diff_cents_beyond_vqt_range_rejected():
+    # Regression: the search radius was validated from below (>= 1 bin) but
+    # not against n_bins. Once it reaches n_bins the overlap length K_tau hits
+    # zero, the Pearson normalization divides by it, and NaN confidences
+    # escaped the estimator -- surfacing much later as an unrelated
+    # "confidences must be finite" error from the solver.
+    x = _sine(dur=0.5)
+    with pytest.raises(ValueError, match="max_diff_cents"):
+        # 600 cents at 36 bins/octave is an 18-bin radius; the VQT has 12.
+        vqt_diff_calculator(x, SR, HOP, (1,), bins_per_octave=36, n_bins=12)
+    with pytest.raises(ValueError, match="max_diff_cents"):
+        vqt_diff_calculator(x, SR, HOP, (1,), bins_per_octave=36, n_bins=18)  # radius == n_bins
+
+
+def test_narrowest_valid_vqt_range_stays_finite():
+    # One bin wider than the search radius is the tightest legal setting;
+    # it must still produce finite confidences rather than NaN.
+    x = _sine(dur=0.5)
+    _, est, conf = vqt_diff_calculator(x, SR, HOP, (1,), bins_per_octave=36, n_bins=19)
+    assert bool(np.isfinite(est).all())
+    assert bool(np.isfinite(conf).all())
+    assert bool(((conf >= 0) & (conf <= 1)).all())
+
+
+def _two_sided_vqt(max_diff_bins, F=80, base=24):
+    """VQT whose correlation column has lobes at *both* ends of the shift axis.
+
+    Frame 0 carries two peaks ``2 * max_diff_bins`` apart and of unequal
+    height; frame 1 carries one peak centred between them, so shifting by
+    ``+max_diff_bins`` aligns the lower pair and ``-max_diff_bins`` the upper.
+    The peak lands on index 0 while the opposite end stays non-zero -- exactly
+    the shape the ``idx - 1 == -1`` wrap used to read from.
+    """
+    V = np.full((F, 2), 1e-6)
+    hi = base + 2 * max_diff_bins
+    V[base - 1 : base + 2, 0] = [0.5, 1.0, 0.5]
+    V[hi - 1 : hi + 2, 0] = [0.4, 0.8, 0.4]
+    V[base + max_diff_bins - 1 : base + max_diff_bins + 2, 1] = [0.5, 1.0, 0.5]
+    return V
+
+
+def test_boundary_peak_does_not_wrap_around_the_shift_axis():
+    # Regression: the stencil clamp was one-sided (np.minimum), so at idx == 0
+    # the index -1 wrapped to the opposite end of the shift axis and the
+    # parabolic offset was fitted across an unrelated shift. With a lobe at
+    # both ends this pushed the reported difference outside the
+    # +-max_diff_cents window the estimator promises (204.2 from a +-200 one).
+    max_diff_bins, diff_unit = 6, 1200 / 36
+    limit = max_diff_bins * diff_unit
+    V = _two_sided_vqt(max_diff_bins)
+    setup = _vqt_xcorr_setup(V, max_diff_bins)
+    _, est, conf = hop_diff(V, 1, max_diff_bins, diff_unit, setup=setup)
+
+    assert bool(np.isfinite(est).all())
+    assert bool((np.abs(est) <= limit + 1e-9).all()), f"estimate outside +-{limit} cents"
+    # the peak is pinned to the boundary, so it carries no weight and reports
+    # the search limit itself, with no interpolated sub-bin offset
+    assert conf[0] == 0
+    np.testing.assert_allclose(est[0], limit)
