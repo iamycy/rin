@@ -1,10 +1,10 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
 [project]
 name = "rin-pitch"
-version = "1.0.0"
+dynamic = ["version"]
 description = "Relative Interval Network (RIN) pitch smoothing: fuse absolute F0 estimates with multi-hop VQT relative pitch differences through a network-flow LP"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -25,6 +25,11 @@ dependencies = ["numpy>=2", "scipy", "librosa"]
 Homepage = "https://github.com/iamycy/rin"
 Repository = "https://github.com/iamycy/rin"
 
+# The git tag is the single source of truth for the version: `git tag v1.1.0`.
+# Nothing in the repo declares a version number.
+[tool.hatch.version]
+source = "vcs"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/rin"]
 
@@ -35,4 +40,17 @@ testpaths = ["tests"]
 line-length = 100
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "UP"]
+select = ["D", "E", "F", "W", "I", "UP"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+
+[tool.ruff.lint.per-file-ignores]
+# Test functions are named to describe themselves; docstrings would restate them.
+"tests/*" = ["D"]
+
+# Public API only: private helpers carry a one-line summary by design.
+# EX01/SA01/ES01 are optional numpydoc sections this package does not use.
+[tool.numpydoc_validation]
+checks = ["all", "EX01", "SA01", "ES01"]
+exclude = ['^_', '\._']

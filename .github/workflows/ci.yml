@@ -15,6 +15,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # hatch-vcs derives the version from git tags
+          fetch-depth: 0
       - uses: prefix-dev/setup-pixi@v0.8.1
         with:
           pixi-version: latest
@@ -26,6 +29,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # hatch-vcs derives the version from git tags
+          fetch-depth: 0
       - uses: prefix-dev/setup-pixi@v0.8.1
         with:
           pixi-version: latest

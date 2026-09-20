@@ -11,9 +11,10 @@
 #   5. After that, the conda-forge autotick bot opens version-bump PRs
 #      automatically on every PyPI release -- no manual work per release.
 #
-# Local validation: `pixi build` in the repo root builds the equivalent
-# noarch conda package from the same pyproject.toml (see the [package]
-# section in pixi.toml).
+# The version below is the one place a version number is written by hand, and
+# only until submission: set it to the git tag being released, then the
+# conda-forge autotick bot maintains it in the feedstock. Everywhere else the
+# version comes from the git tag via hatch-vcs.
 
 {% set name = "rin-pitch" %}
 {% set version = "1.0.0" %}
