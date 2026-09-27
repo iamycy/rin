@@ -1,8 +1,7 @@
-# rin-pitch
+# RIN (Relative Interval Networks)
 
-Relative Interval Network (RIN) pitch smoothing: fuse per-frame absolute pitch estimates (from any F0 tracker) with multi-hop relative pitch differences estimated from a magnitude VQT, through a network-flow linear program.
-
-This is the reference implementation accompanying the paper "Pitch Smoothing Using Relative Interval Networks" (ICASSP 2027).
+This is the reference implementation accompanying the paper [Pitch Smoothing Using Relative Interval Networks]().
+We propose a method for smoothing pitch estimates by combining absolute pitch measurements with multi-hop relative pitch differences, using a network-flow linear program for optimal fusion.
 
 ## Install
 
@@ -76,21 +75,29 @@ from functools import partial
 
 from rin import smooth_pitch, vqt_diff_calculator
 
+
 def my_estimator(x, sr, hop_length, hops):
     # -> (edges (E,2) int, estimates (E,) cents, confidences (E,) in [0,1])
     ...
+
 
 def my_solver(abs_estimates, abs_confidences, rel_edges, rel_estimates, rel_confidences):
     # -> smooth_pitch (M,) cents
     ...
 
+
 def my_voicing(abs_confidences, rel_edges, rel_confidences):
     # -> voicing (M,) in [0,1]
     ...
 
+
 # One call, custom stages (tune a stage via functools.partial):
 f0_smooth, voicing = smooth_pitch(
-    x, f0, strength, sr, hop_length,
+    x,
+    f0,
+    strength,
+    sr,
+    hop_length,
     difference_estimator=partial(vqt_diff_calculator, max_diff_cents=500.0),
     solver=my_solver,
     voicing_estimator=my_voicing,
