@@ -1,8 +1,8 @@
 """Install the freshly built wheel into a throwaway venv and check it imports.
 
 ``python -m build`` can succeed while producing a wheel that is unusable, and
-the version is wired through three hops -- git tag, ``hatch-vcs``, then
-``importlib.metadata`` at import time -- none of which the build itself
+the version is wired through three hops (git tag, ``hatch-vcs``, then
+``importlib.metadata`` at import time), none of which the build itself
 verifies. A shallow checkout, for instance, builds cleanly and yields a
 placeholder version that would be published for real. Run after ``build``.
 """
@@ -20,7 +20,7 @@ def main() -> int:
     """Install the newest wheel in ``dist/`` and verify its version wiring."""
     wheels = sorted(DIST.glob("*.whl"), key=lambda p: p.stat().st_mtime)
     if not wheels:
-        print(f"no wheel in {DIST}/ -- run `pixi run build` first", file=sys.stderr)
+        print(f"no wheel in {DIST}/; run `pixi run build` first", file=sys.stderr)
         return 1
     wheel = wheels[-1]
     # rin_pitch-<version>-py3-none-any.whl

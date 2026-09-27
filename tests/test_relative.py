@@ -97,7 +97,7 @@ def test_max_diff_cents_beyond_vqt_range_rejected():
     # Regression: the search radius was validated from below (>= 1 bin) but
     # not against n_bins. Once it reaches n_bins the overlap length K_tau hits
     # zero, the Pearson normalization divides by it, and NaN confidences
-    # escaped the estimator -- surfacing much later as an unrelated
+    # escaped the estimator, surfacing much later as an unrelated
     # "confidences must be finite" error from the solver.
     x = _sine(dur=0.5)
     with pytest.raises(ValueError, match="max_diff_cents"):
@@ -123,7 +123,7 @@ def _two_sided_vqt(max_diff_bins, F=80, base=24):
     Frame 0 carries two peaks ``2 * max_diff_bins`` apart and of unequal
     height; frame 1 carries one peak centred between them, so shifting by
     ``+max_diff_bins`` aligns the lower pair and ``-max_diff_bins`` the upper.
-    The peak lands on index 0 while the opposite end stays non-zero -- exactly
+    The peak lands on index 0 while the opposite end stays non-zero, exactly
     the shape the ``idx - 1 == -1`` wrap used to read from.
     """
     V = np.full((F, 2), 1e-6)

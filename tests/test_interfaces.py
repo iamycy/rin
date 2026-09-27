@@ -2,7 +2,7 @@
 
 The package exposes exactly three core functions, each obeying one of the
 ``rin.interfaces`` signatures. Swapping one out is just calling a different
-function -- no wrapper, no registration -- which makes the positional
+function (no wrapper, no registration), which makes the positional
 parameter names part of the public contract. Injection through
 ``smooth_pitch`` is covered in ``test_pipeline.py``.
 """

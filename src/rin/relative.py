@@ -5,7 +5,7 @@ normalized cross-correlation of their VQT magnitude slices over a bounded
 pitch-shift window; the peak (with parabolic interpolation) gives the relative
 pitch difference in cents, and the peak's shape gives a confidence weight.
 
-The estimation path is fixed -- see :func:`vqt_diff_calculator` -- and only
+The estimation path is fixed (see :func:`vqt_diff_calculator`) and only
 the VQT's shape is a parameter.
 """
 
@@ -187,7 +187,7 @@ def _hop_diff(
         raise ValueError("jump must be an integer") from None
     if jump < 1:
         raise ValueError("jump must be positive")
-    # Before the setup call, so V[:, jump:].T shares its layout -- see _vqt_xcorr_setup.
+    # Before the setup call, so V[:, jump:].T shares its layout; see _vqt_xcorr_setup.
     V = np.asfortranarray(V)
     if setup is None:
         setup = _vqt_xcorr_setup(V, max_diff_bins)
@@ -209,8 +209,8 @@ def _hop_diff(
 
     # At a boundary peak, idx - 1 == -1 indexes from the far end of the shift
     # axis, so the stencil is not a neighbourhood of the peak. Harmless: both
-    # of its consumers are zeroed at hit_boundary -- p just below, and
-    # diff_probs further down.
+    # of its consumers are zeroed at hit_boundary (p just below, and
+    # diff_probs further down).
     abc = -np.take_along_axis(
         dots,
         np.minimum(np.stack([idx - 1, idx, idx + 1], axis=0), dots.shape[0] - 1),

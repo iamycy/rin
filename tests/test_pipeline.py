@@ -1,7 +1,7 @@
 """End-to-end tests: the high-level pipeline and manual core wiring.
 
 ``smooth_pitch`` is the paper's version in one call; the manual test below
-shows the intended custom-wiring pattern -- the package does no caching and
+shows the intended custom-wiring pattern: the package does no caching and
 no file loading, each caller manages their own pipeline around the cores.
 """
 

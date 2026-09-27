@@ -3,11 +3,11 @@
 Chains a difference estimator, a solver and a voicing estimator, defaulting
 to the paper's three:
 
-1. :func:`rin.relative.vqt_diff_calculator` -- Pearson normalized
+1. :func:`rin.relative.vqt_diff_calculator`: Pearson normalized
    cross-correlation of VQT magnitude slices, arcsin x peak2mean confidence
    weighting.
-2. :func:`rin.lp.lp_smoother` -- dual min-cost circulation LP fusion.
-3. :func:`rin.lp.estimate_voicing` -- distance-weighted RMS voicing fusion.
+2. :func:`rin.lp.lp_smoother`: dual min-cost circulation LP fusion.
+3. :func:`rin.lp.estimate_voicing`: distance-weighted RMS voicing fusion.
 
 The package never converts pitch units: absolute and relative estimates
 must share one pitch domain (the built-in estimator outputs cents), and
@@ -45,7 +45,7 @@ def smooth_pitch(
     (obeying the contracts in :mod:`rin.interfaces`) to swap any stage.
     Configure a stage with :func:`functools.partial`, e.g.
     ``difference_estimator=partial(vqt_diff_calculator,
-    max_diff_cents=500.0)`` -- ``smooth_pitch`` itself takes no
+    max_diff_cents=500.0)``; ``smooth_pitch`` itself takes no
     stage-specific keyword arguments.
 
     Parameters
@@ -97,11 +97,11 @@ def smooth_pitch(
     # ``f0`` must sit on the estimator's frame grid: every edge must index
     # into it (an out-of-range one is silently dropped downstream), and it may
     # not be longer than the hop grid holds (e.g. computed at a different
-    # hop_length). Not an equality check against ``edges.max() + 1`` -- that is
+    # hop_length). Not an equality check against ``edges.max() + 1``, which is
     # only a lower bound, since an estimator may leave trailing frames
     # unconnected, so it would reject a correctly sized ``f0``. When there are
-    # no edges at all, though, nothing constrains ``f0`` from below -- the
-    # upper-bound check on edges is what does that in the general case -- so
+    # no edges at all, though, nothing constrains ``f0`` from below (the
+    # upper-bound check on edges is what does that in the general case), so
     # the hop grid is required exactly.
     n_samples = np.shape(x)[-1]
     grid_frames = 1 + n_samples // hop_length

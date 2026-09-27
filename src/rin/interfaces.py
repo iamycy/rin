@@ -3,7 +3,7 @@
 The three extension points are plain function signatures: implement a
 function with the documented signature and call it in place of the built-in
 cores (:func:`rin.vqt_diff_calculator`, :func:`rin.lp_smoother`,
-:func:`rin.estimate_voicing`). No inheritance, no classes required -- any
+:func:`rin.estimate_voicing`). No inheritance, no classes required: any
 callable works (function, lambda, ``functools.partial``, or a callable
 object) as long as it obeys the signature.
 
@@ -54,7 +54,7 @@ Solver: TypeAlias = Callable[
 Signature: ``(abs_estimates, abs_confidences, rel_edges, rel_estimates,
 rel_confidences) -> smooth_pitch``.
 
-The pitch domain is the caller's choice -- ``abs_estimates`` and
+The pitch domain is the caller's choice: ``abs_estimates`` and
 ``rel_estimates`` must share it, and the output is in the same domain.
 
 Parameters

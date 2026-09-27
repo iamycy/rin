@@ -2,7 +2,7 @@ name: Release
 
 # Publish to PyPI on version tags, e.g. v1.0.0.
 # The tag IS the version: hatch-vcs derives it from `git describe`, so nothing
-# in the repo declares one. fetch-depth: 0 below is required -- a shallow
+# in the repo declares one. fetch-depth: 0 below is required: a shallow
 # checkout has no tags and would publish a 0.0.0 release, which `pixi run smoke`
 # below is there to catch before anything reaches PyPI.
 # First release: create a pending trusted publisher for the `rin-pitch`

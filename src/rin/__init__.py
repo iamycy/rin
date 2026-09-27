@@ -12,7 +12,7 @@ Three core functions, arrays in / arrays out:
 stage is an injectable callable, so it doubles as a swappable pipeline.
 Each core is a plain function obeying the contracts in :mod:`rin.interfaces`.
 Bring your own implementations with the same signatures and wire them
-however you like -- this package does no file loading and no caching.
+however you like; this package does no file loading and no caching.
 """
 
 from importlib.metadata import PackageNotFoundError, version
@@ -24,7 +24,7 @@ from .relative import vqt_diff_calculator
 
 try:
     __version__ = version("rin-pitch")
-except PackageNotFoundError:  # pragma: no cover -- source tree with no install
+except PackageNotFoundError:  # pragma: no cover (source tree with no install)
     __version__ = "0.0.0+unknown"
 
 __all__ = [

@@ -9,7 +9,7 @@
 #   4. Open a PR against conda-forge/staged-recipes with this file as
 #      recipe/meta.yaml. Merging creates the rin-pitch-feedstock repo.
 #   5. After that, the conda-forge autotick bot opens version-bump PRs
-#      automatically on every PyPI release -- no manual work per release.
+#      automatically on every PyPI release, with no manual work per release.
 #
 # The version below is the one place a version number is written by hand, and
 # only until submission: set it to the git tag being released, then the
