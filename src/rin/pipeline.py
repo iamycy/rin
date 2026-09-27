@@ -95,11 +95,10 @@ def smooth_pitch(
 
     edges, estimates, confidences = difference_estimator(x, sr, hop_length, hops)
     # ``f0`` must sit on the estimator's frame grid: every edge must index
-    # into it (an out-of-range one is silently dropped downstream), and it
-    # may not be
-    # longer than the hop grid holds (e.g. computed at a different
-    # hop_length). Not an equality check against ``edges.max() + 1`` -- that
-    # is only a lower bound, since an estimator may leave trailing frames
+    # into it (an out-of-range one is silently dropped downstream), and it may
+    # not be longer than the hop grid holds (e.g. computed at a different
+    # hop_length). Not an equality check against ``edges.max() + 1`` -- that is
+    # only a lower bound, since an estimator may leave trailing frames
     # unconnected, so it would reject a correctly sized ``f0``. When there are
     # no edges at all, though, nothing constrains ``f0`` from below -- the
     # upper-bound check on edges is what does that in the general case -- so

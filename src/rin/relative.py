@@ -53,7 +53,7 @@ def _flat_weight(dots: np.ndarray, corr_max: np.ndarray) -> np.ndarray:
     return 1 - np.mean(dots, axis=0) / np.maximum(corr_max, 1e-10)
 
 
-def compute_vqt(
+def _compute_vqt(
     x: np.ndarray,
     sr: int,
     hop_length: int,
@@ -144,7 +144,7 @@ def _vqt_xcorr_setup(V: np.ndarray, max_diff_bins: int):
     return sliding_V, sliding_V_norm, window_sum, K_tau
 
 
-def hop_diff(
+def _hop_diff(
     V: np.ndarray,
     jump: int,
     max_diff_bins: int,
@@ -298,7 +298,7 @@ def vqt_diff_calculator(
     if bins_per_octave <= 0:
         raise ValueError("bins_per_octave must be positive")
 
-    V = compute_vqt(x, sr, hop_length, bins_per_octave=bins_per_octave, **vqt_kwargs)
+    V = _compute_vqt(x, sr, hop_length, bins_per_octave=bins_per_octave, **vqt_kwargs)
 
     diff_unit = 1200 / bins_per_octave
     max_diff_bins = int(max_diff_cents / diff_unit)
@@ -320,7 +320,7 @@ def vqt_diff_calculator(
     diff_pitch_confidences = []
     edges = []
     for jump in hops:
-        hop_edges, pitch_diffs, diff_probs = hop_diff(
+        hop_edges, pitch_diffs, diff_probs = _hop_diff(
             V,
             jump,
             max_diff_bins,

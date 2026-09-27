@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from rin.relative import _vqt_xcorr_setup, compute_vqt, hop_diff, vqt_diff_calculator
+from rin.relative import _compute_vqt, _hop_diff, _vqt_xcorr_setup, vqt_diff_calculator
 
 SR = 16000
 HOP = int(0.02 * SR)
@@ -44,12 +44,12 @@ def test_chirp_diff_tracks_instantaneous_change():
 
 
 def test_hop_diff_without_setup_matches():
-    # hop_diff computes the xcorr setup itself when none is passed.
+    # _hop_diff computes the xcorr setup itself when none is passed.
     x = _sine()
-    V = compute_vqt(x, SR, HOP)
+    V = _compute_vqt(x, SR, HOP)
     max_diff_bins = int(600.0 / (1200 / 36))
-    ref = hop_diff(V, 2, max_diff_bins, 1200 / 36, setup=_vqt_xcorr_setup(V, max_diff_bins))
-    out = hop_diff(V, 2, max_diff_bins, 1200 / 36)
+    ref = _hop_diff(V, 2, max_diff_bins, 1200 / 36, setup=_vqt_xcorr_setup(V, max_diff_bins))
+    out = _hop_diff(V, 2, max_diff_bins, 1200 / 36)
     for a, b in zip(ref, out):
         np.testing.assert_allclose(a, b, rtol=1e-12)
 
@@ -57,9 +57,9 @@ def test_hop_diff_without_setup_matches():
 def test_vqt_uses_paper_n_bins_by_default():
     # n_bins=252 is the default; overriding still works.
     x = _sine(dur=0.5)
-    V = compute_vqt(x, SR, HOP)
+    V = _compute_vqt(x, SR, HOP)
     assert V.shape[0] == 252
-    assert compute_vqt(x, SR, HOP, n_bins=84).shape[0] == 84
+    assert _compute_vqt(x, SR, HOP, n_bins=84).shape[0] == 84
 
 
 def test_invalid_inputs_fail_fast():
@@ -86,11 +86,11 @@ def test_invalid_inputs_fail_fast():
 
 def test_hop_diff_rejects_nonpositive_jump():
     x = _sine(dur=0.5)
-    V = compute_vqt(x, SR, HOP)
+    V = _compute_vqt(x, SR, HOP)
     with pytest.raises(ValueError, match="jump"):
-        hop_diff(V, 0, 18, 1200 / 36)
+        _hop_diff(V, 0, 18, 1200 / 36)
     with pytest.raises(ValueError, match="jump"):
-        hop_diff(V, 1.5, 18, 1200 / 36)
+        _hop_diff(V, 1.5, 18, 1200 / 36)
 
 
 def test_max_diff_cents_beyond_vqt_range_rejected():
@@ -144,7 +144,7 @@ def test_boundary_peak_does_not_wrap_around_the_shift_axis():
     limit = max_diff_bins * diff_unit
     V = _two_sided_vqt(max_diff_bins)
     setup = _vqt_xcorr_setup(V, max_diff_bins)
-    _, est, conf = hop_diff(V, 1, max_diff_bins, diff_unit, setup=setup)
+    _, est, conf = _hop_diff(V, 1, max_diff_bins, diff_unit, setup=setup)
 
     assert bool(np.isfinite(est).all())
     assert bool((np.abs(est) <= limit + 1e-9).all()), f"estimate outside +-{limit} cents"
@@ -157,7 +157,7 @@ def test_boundary_peak_does_not_wrap_around_the_shift_axis():
 def test_correlation_reduction_axes_stay_contiguous(monkeypatch):
     # Guards the np.asfortranarray calls in relative.py: dropping either costs
     # ~4.7x, and no accuracy test would notice.
-    V = np.ascontiguousarray(compute_vqt(_sine(), SR, HOP))
+    V = np.ascontiguousarray(_compute_vqt(_sine(), SR, HOP))
     assert not V.flags.f_contiguous
 
     sliding_V = _vqt_xcorr_setup(V, 18)[0]
@@ -171,5 +171,5 @@ def test_correlation_reduction_axes_stay_contiguous(monkeypatch):
         return real_vecdot(a, b, **kwargs)
 
     monkeypatch.setattr(np.linalg, "vecdot", spy)
-    hop_diff(V, 1, 18, 1200 / 36)
+    _hop_diff(V, 1, 18, 1200 / 36)
     assert seen == [(V.itemsize, V.itemsize)]

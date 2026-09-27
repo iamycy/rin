@@ -197,7 +197,7 @@ def lp_smoother(
     cols = np.concatenate([np.arange(M), rel_cols, rel_cols])
     data = np.concatenate([np.ones(M), -np.ones(E), np.ones(E)])
     B = csr_matrix((data, (rows, cols)), shape=(M, num_arcs))
-    bounds = list(zip(-all_weights, all_weights))
+    bounds = np.stack([-all_weights, all_weights], axis=1)
     res = linprog(
         c=all_deltas,
         A_eq=B,
