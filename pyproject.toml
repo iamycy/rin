@@ -10,7 +10,11 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 license-files = ["LICENSE"]
-authors = [{ name = "Chin-Yun Yu" }, { name = "Chi-Jen Peng" }]
+authors = [
+    { name = "Chin-Yun Yu", email = "chin-yun.yu@qmul.ac.uk" },
+    { name = "Chi-Jen Peng" },
+]
+maintainers = [{ name = "Chin-Yun Yu", email = "chin-yun.yu@qmul.ac.uk" }]
 keywords = ["pitch-tracking", "f0-estimation", "vqt", "network-flow", "audio"]
 classifiers = [
     "Development Status :: 3 - Alpha",

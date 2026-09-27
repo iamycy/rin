@@ -1,7 +1,7 @@
 [workspace]
 name = "rin-pitch"
 description = "Relative Interval Network (RIN) pitch smoothing: fuse absolute F0 estimates with multi-hop VQT relative pitch differences through a network-flow LP"
-authors = ["Chin-Yun Yu", "Chi-Jen Peng"]
+authors = ["Chin-Yun Yu <chin-yun.yu@qmul.ac.uk>", "Chi-Jen Peng"]
 channels = ["conda-forge"]
 platforms = ["linux-64", "osx-arm64", "osx-64", "win-64"]
 
