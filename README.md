@@ -1,6 +1,6 @@
 # RIN (Relative Interval Networks)
 
-This is the reference implementation accompanying the paper [Pitch Smoothing Using Relative Interval Networks]().
+This is the reference implementation accompanying the paper [Pitch Smoothing Using Relative Interval Networks](), submitted to ICASSP 2027.
 We propose a method for smoothing pitch estimates by combining absolute pitch measurements with multi-hop relative pitch differences, using a network-flow linear program for optimal fusion.
 
 ## Install
