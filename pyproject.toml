@@ -8,18 +8,22 @@ dynamic = ["version"]
 description = "Relative Interval Network (RIN) pitch smoothing: fuse absolute F0 estimates with multi-hop VQT relative pitch differences through a network-flow LP"
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [{ name = "Chin-Yun Yu" }, { name = "Chi-Jen Peng" }]
 keywords = ["pitch-tracking", "f0-estimation", "vqt", "network-flow", "audio"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Topic :: Multimedia :: Sound/Audio :: Analysis",
     "Topic :: Scientific/Engineering :: Information Analysis",
 ]
-dependencies = ["numpy>=2", "scipy", "librosa"]
+# Floors are the oldest releases that work with NumPy 2, which
+# `np.linalg.vecdot` in relative.py already requires: SciPy 1.12 caps
+# `numpy<1.29` and 1.13 is the first to allow 2.x, and librosa 0.10.1
+# fails to import while 0.10.2 runs clean.
+dependencies = ["numpy>=2", "scipy>=1.13", "librosa>=0.10.2"]
 
 [project.urls]
 Homepage = "https://github.com/iamycy/rin"
