@@ -186,7 +186,7 @@ def lp_smoother(
     # B is the M x (M+E) node-arc incidence matrix (flow conservation per frame):
     #   arcs 0..M-1    ground -> node i, carrying the absolute estimates
     #   arcs M..M+E-1  node u -> node v, carrying the relative differences
-    # By strong duality the multipliers of B y = 0 (-res.eqlin.marginals) are
+    # By strong duality the multipliers of B y = 0 (res.eqlin.marginals) are
     # the optimal node potentials, i.e. the smoothed contour.
     num_arcs = M + E
     all_deltas = np.concatenate([abs_estimates, rel_estimates])

@@ -97,8 +97,9 @@ by solving its **Lagrangian dual** — a min-cost circulation on a graph with on
 Consequences when editing:
 
 - `B` is the `M × (M+E)` node-arc incidence matrix: arcs `0..M-1` are ground→node (absolute terms), arcs `M..M+E-1` are `u→v` (relative terms).
-- The objective is `c = -all_deltas` and the answer is `-res.eqlin.marginals` (node potentials).
-  Both sign flips are load-bearing; changing one without the other silently negates the contour.
+- The objective is `c = all_deltas` and the answer is `res.eqlin.marginals` (node potentials).
+  The two signs are coupled, not independent: the feasible set (`B y = 0`, bounds `±w`) is invariant under `y -> -y`, so negating `c` negates the marginals exactly and flipping both together is a no-op — which is why the older `c = -all_deltas` / `-marginals` pairing gave identical contours.
+  Flipping only one silently negates the contour.
 - Arc bounds are `(-w, +w)`; absolute weights are floored at `1e-6` because exact zeros pin the ground arcs and make the circulation degenerate.
 - `tests/test_lp.py` contains `_primal_smoother`, an explicit primal LP with slack variables, used as the reference oracle for the dual.
   Any change to the dual formulation must keep that equivalence test passing.
