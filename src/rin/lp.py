@@ -199,7 +199,7 @@ def lp_smoother(
     B = csr_matrix((data, (rows, cols)), shape=(M, num_arcs))
     bounds = list(zip(-all_weights, all_weights))
     res = linprog(
-        c=-all_deltas,
+        c=all_deltas,
         A_eq=B,
         b_eq=np.zeros(M),
         bounds=bounds,
@@ -207,4 +207,4 @@ def lp_smoother(
     )
     if not res.success:  # pragma: no cover -- HiGHS fails only on degenerate input
         raise ValueError("LP smoothing failed: " + res.message)
-    return -res.eqlin.marginals
+    return res.eqlin.marginals
