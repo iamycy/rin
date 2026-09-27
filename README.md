@@ -117,9 +117,10 @@ pixi run lint        # ruff check
 pixi run docstrings  # numpydoc validation of the public API
 pixi run format      # ruff format
 pixi run build       # sdist + wheel
+pixi run smoke       # install the built wheel in a clean venv and check its version
 ```
 
-CI runs `lint`, `docstrings` and `test` on Linux, macOS and Windows via pixi.
+CI runs `lint` and `docstrings` once, and `test` on Linux, macOS and Windows across Python 3.10-3.13 (`pixi run -e py310 test` reproduces one cell locally).
 
 The version comes from the git tag -- no file in the repo declares one -- so a release is `git tag v1.1.0 && git push --tags`, which builds and publishes to PyPI.
 

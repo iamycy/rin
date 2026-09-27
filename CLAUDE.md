@@ -9,7 +9,7 @@ It fuses per-frame absolute F0 estimates (from any external tracker) with multi-
 
 ## Commands
 
-Development runs through [pixi](https://pixi.sh) (the `default` environment includes the `dev` feature):
+Development runs through [pixi](https://pixi.sh); the `default` environment carries both the `test` and `dev` features:
 
 ```sh
 pixi install
@@ -17,8 +17,13 @@ pixi run test          # pytest -v
 pixi run lint          # ruff check src tests
 pixi run format        # ruff format src tests
 pixi run build         # python -m build (sdist + wheel)
+pixi run smoke         # install the built wheel in a clean venv, check its version
 pixi run docstrings    # numpydoc validation of the public API
 ```
+
+`py310`, `py311`, `py312` and `py313` pin one interpreter each for the CI matrix — `pixi run -e py310 test`.
+They carry the `test` feature but not `dev`: `numpydoc >=1.11` requires Python >=3.11, so bundling the tooling in would make a 3.10 environment unsolvable.
+Keep the runner in `test` and the tooling in `dev`.
 
 Run a single test or file:
 
@@ -28,10 +33,11 @@ pixi run pytest tests/test_lp.py::test_dual_matches_primal -v
 pixi run pytest -k voicing -v
 ```
 
-CI (`.github/workflows/ci.yml`) runs `lint` + `test` on Linux, macOS, and Windows, plus a `build` job.
-Pushing a `v*` tag triggers `release.yml`, which lints, tests, builds, and publishes to PyPI via trusted publishing.
+CI (`.github/workflows/ci.yml`) runs `lint` + `docstrings` once, then `test` across a 3-OS x 4-Python matrix, plus a `build` job ending in `smoke`.
+Pushing a `v*` tag triggers `release.yml`, which lints, checks docstrings, tests, builds, smoke-tests the wheel, and publishes to PyPI via trusted publishing.
+Both workflows pass `locked: true` to `setup-pixi`, so a `pixi.toml` edit that was not re-locked fails CI instead of silently resolving to something else.
 
-Ruff config lives in `pyproject.toml`: line length 100, rules `E, F, W, I, UP`.
+Ruff config lives in `pyproject.toml`: line length 100, rules `D, E, F, W, I, UP`.
 
 ## Conventions
 
@@ -103,9 +109,9 @@ Consequences when editing:
 VQT shape parameters (`bins_per_octave=36`, `n_bins=252`, `max_diff_cents=600`) and extra `librosa.vqt` kwargs are plain arguments.
 The paper's hop set is `HOPS = (1, 2, 3, 5)`, exported from `rin`.
 
-Performance structure: `compute_vqt` and `_vqt_xcorr_setup` are factored out because the padded VQT, sliding-window view, and window norms depend only on `(V, max_diff_bins)` — not on the hop — so they are computed once per clip and passed into every `hop_diff` call.
+Performance structure: `_compute_vqt` and `_vqt_xcorr_setup` are factored out because the padded VQT, sliding-window view, and window norms depend only on `(V, max_diff_bins)` — not on the hop — so they are computed once per clip and passed into every `_hop_diff` call.
 Keep new per-hop work out of the setup and vice versa.
-Both `_vqt_xcorr_setup` and `hop_diff` force `V` Fortran-ordered: the correlation's two reduction axes are contiguous only under F order, and C order costs 4.7x.
+Both `_vqt_xcorr_setup` and `_hop_diff` force `V` Fortran-ordered: the correlation's two reduction axes are contiguous only under F order, and C order costs 4.7x.
 `librosa.vqt` already returns F-ordered output, so the guards are no-ops in practice and `test_correlation_reduction_axes_stay_contiguous` is what makes their removal visible.
 
 Peak picking rectifies correlations before `argmax`; frames whose peak lands on the search boundary get zero confidence via `hit_boundary`, which also covers the all-negative-column collapse to index 0.
@@ -126,6 +132,7 @@ Between tags the version is a dev string such as `0.1.dev18+g6afb39f`, so a work
 
 Both workflows check out with `fetch-depth: 0`.
 This is load-bearing: `hatch-vcs` needs the full history and tags, and the default shallow clone would silently produce a `0.0.0` version and publish it to PyPI.
+`pixi run smoke` is the backstop for exactly that: it installs the built wheel into a throwaway venv and fails unless `rin.__version__` matches the version in the wheel's own filename, which catches a shallow checkout and any other break in the tag -> `hatch-vcs` -> `importlib.metadata` chain before anything reaches PyPI.
 
 `pixi build` is deliberately **not** configured (no `[package]` table, no `preview = ["pixi-build"]`).
 Pixi requires a static `[project] version` and rejects `dynamic = ["version"]` with `There was no version defined for the recipe`, so its build backend is incompatible with tag-derived versioning.
