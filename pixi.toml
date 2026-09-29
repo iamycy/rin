@@ -49,7 +49,7 @@ py312 = ["py312", "test"]
 py313 = ["py313", "test"]
 
 [tasks]
-test = { cmd = "pytest -v", description = "Run the test suite" }
+test = { cmd = "pytest -v --cov --cov-branch --cov-report=xml", description = "Run the test suite and write coverage.xml" }
 lint = { cmd = "ruff check src tests", description = "Lint with ruff" }
 docstrings = { cmd = "python -m numpydoc lint src/rin/*.py", description = "Validate public docstrings against numpydoc" }
 format = { cmd = "ruff format src tests", description = "Format with ruff" }

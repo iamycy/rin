@@ -29,6 +29,13 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
         env: [py310, py311, py312, py313]
+        # Only this leg uploads coverage. Marked via `include` rather than an
+        # `if` on matrix values: if py313 is dropped above, include re-adds it
+        # as a leg that fails loudly instead of silently never matching.
+        include:
+          - os: ubuntu-latest
+            env: py313
+            coverage: true
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -40,6 +47,15 @@ jobs:
           environments: ${{ matrix.env }}
           locked: true
       - run: pixi run -e ${{ matrix.env }} test
+      - name: Upload coverage reports to Codecov
+        if: matrix.coverage
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          # name the file rather than letting the action search: a missing
+          # coverage.xml then fails the job instead of uploading nothing
+          files: coverage.xml
+          fail_ci_if_error: true
 
   build:
     name: build sdist and wheel
