@@ -140,3 +140,10 @@ def test_self_loop_is_well_behaved():
     assert bool(((voicing >= 0) & (voicing <= 1)).all())
     np.testing.assert_allclose(voicing[1], 0.8)  # sqrt(1.0 * 0.64)
     np.testing.assert_allclose(voicing[[0, 2]], 0.0)  # no incident edges
+
+
+def test_confidences_above_one_are_clamped():
+    # Nothing validates confidences <= 1, so the upper bounds in estimate_voicing
+    # are the only thing holding the documented [0, 1] return contract.
+    voicing = estimate_voicing(np.full(3, 4.0), np.array([[0, 1], [1, 2]]), np.full(2, 4.0))
+    assert bool(((voicing >= 0) & (voicing <= 1)).all())

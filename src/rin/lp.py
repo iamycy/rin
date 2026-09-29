@@ -109,7 +109,9 @@ def estimate_voicing(
     den = np.bincount(u, d, minlength=M) + np.bincount(v, d, minlength=M)
 
     rel_rms = np.sqrt(np.divide(num, np.maximum(den, 1e-10)))
-    return np.sqrt(np.clip(abs_confidences, 0.0, 1.0) * np.clip(rel_rms, 0.0, 1.0))
+    # Upper bounds only: validation rejects negatives and rel_rms is a square
+    # root, but neither input is bounded above, and this returns a probability.
+    return np.sqrt(np.minimum(abs_confidences, 1.0) * np.minimum(rel_rms, 1.0))
 
 
 def lp_smoother(
@@ -164,7 +166,7 @@ def lp_smoother(
     abs_confidences, rel_edges, rel_confidences, M = _validate_edge_inputs(
         abs_confidences, rel_edges, rel_confidences
     )
-    if abs_estimates.ndim != 1 or abs_estimates.shape != (M,):
+    if abs_estimates.shape != (M,):
         raise ValueError("expected abs_estimates 1-D of length M")
     if rel_estimates.shape != (len(rel_edges),):
         raise ValueError("rel_estimates must have length E")

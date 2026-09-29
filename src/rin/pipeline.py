@@ -105,12 +105,14 @@ def smooth_pitch(
     # the hop grid is required exactly.
     n_samples = np.shape(x)[-1]
     grid_frames = 1 + n_samples // hop_length
-    if edges.size and (int(edges.max()) >= len(f0) or int(edges.min()) < 0):
-        bad = int(edges.max()) if int(edges.max()) >= len(f0) else int(edges.min())
-        raise ValueError(
-            f"the estimator produced an edge referencing frame {bad}, outside "
-            f"[0, {len(f0)}); both must use the same hop_length grid"
-        )
+    if edges.size:
+        lo, hi = int(edges.min()), int(edges.max())
+        if lo < 0 or hi >= len(f0):
+            bad = hi if hi >= len(f0) else lo
+            raise ValueError(
+                f"the estimator produced an edge referencing frame {bad}, outside "
+                f"[0, {len(f0)}); both must use the same hop_length grid"
+            )
     if len(f0) > grid_frames or (not edges.size and len(f0) != grid_frames):
         raise ValueError(
             f"f0 has {len(f0)} frames but hop_length={hop_length} over "

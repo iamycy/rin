@@ -149,6 +149,10 @@ def test_invalid_inputs_fail_fast():
     _, abs_est, abs_conf, edges, rel_est, rel_conf = _synth(M=50)
     with pytest.raises(ValueError):
         lp_smoother(abs_est[:-1], abs_conf, edges, rel_est, rel_conf)  # length mismatch
+    # matched on the message: numpy's concatenate would raise anyway, so a bare
+    # ValueError would not show the shape check is the thing rejecting it
+    with pytest.raises(ValueError, match="abs_estimates 1-D"):
+        lp_smoother(abs_est.reshape(-1, 1), abs_conf, edges, rel_est, rel_conf)
     with pytest.raises(ValueError):
         lp_smoother(abs_est, -abs_conf, edges, rel_est, rel_conf)  # negative conf
     with pytest.raises(ValueError):

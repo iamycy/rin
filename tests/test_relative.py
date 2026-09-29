@@ -173,3 +173,16 @@ def test_correlation_reduction_axes_stay_contiguous(monkeypatch):
     monkeypatch.setattr(np.linalg, "vecdot", spy)
     _hop_diff(V, 1, 18, 1200 / 36)
     assert seen == [(V.itemsize, V.itemsize)]
+
+
+def test_identical_frames_keep_confidences_finite():
+    # Guards the upper clip in _dot_weight. The parabola vertex sits above the
+    # discrete peak, so corr_max reaches 1 + 1e-15 when two frames match
+    # exactly and arcsin returns NaN; the column is interior, so hit_boundary
+    # does not mask it and the NaN would reach the solver.
+    col = np.exp(-((np.arange(60) - 22) / 5.0) ** 2) + 1e-9
+    V = np.asfortranarray(np.stack([col, col], axis=1))
+    _, est, conf = _hop_diff(V, 1, 6, 1200 / 36)
+    assert bool(np.isfinite(est).all())
+    assert bool(np.isfinite(conf).all())
+    assert bool(((conf >= 0) & (conf <= 1)).all())
