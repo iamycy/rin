@@ -13,7 +13,7 @@ Development runs through [pixi](https://pixi.sh); the `default` environment carr
 
 ```sh
 pixi install
-pixi run test          # pytest -v
+pixi run test          # pytest -v with branch coverage, writes coverage.xml
 pixi run lint          # ruff check src tests
 pixi run format        # ruff format src tests
 pixi run build         # python -m build (sdist + wheel)
@@ -34,6 +34,9 @@ pixi run pytest -k voicing -v
 ```
 
 CI (`.github/workflows/ci.yml`) runs `lint` + `docstrings` once, then `test` across a 3-OS x 4-Python matrix, plus a `build` job ending in `smoke`.
+Every leg writes `coverage.xml` (the `test` task carries `--cov --cov-branch --cov-report=xml`), but only the `ubuntu-latest` + `py313` leg uploads to Codecov, since no code path here is platform or version specific.
+That leg is picked out by a matrix `include` key rather than an `if` comparing matrix values: if `py313` is ever dropped from the list, `include` re-adds it as a leg that fails on `pixi run -e py313`, instead of the condition quietly never matching and coverage uploads stopping unnoticed.
+Coverage scope lives in `[tool.coverage.run]` in `pyproject.toml`, which uses `omit` rather than `source`: `source` rewrites the XML to bare basenames under a `src/rin` prefix and Codecov then fails to match them against the repo.
 Pushing a `v*` tag triggers `release.yml`, which lints, checks docstrings, tests, builds, smoke-tests the wheel, and publishes to PyPI via trusted publishing.
 Both workflows pass `locked: true` to `setup-pixi`, so a `pixi.toml` edit that was not re-locked fails CI instead of silently resolving to something else.
 

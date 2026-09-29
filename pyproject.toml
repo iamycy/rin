@@ -45,6 +45,16 @@ packages = ["src/rin"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
+# `pixi run test` passes a bare `--cov`, so the scope lives here. Without the
+# omit, pytest-cov also measures `tests/` and reports the suite's own coverage
+# to Codecov. Do not set `source` instead: it rewrites the XML filenames to
+# bare basenames under a `src/rin` prefix, and Codecov then fails to match them
+# against the repo. relative_files keeps paths checkout-independent so the
+# Linux, macOS and Windows legs all report identical filenames.
+[tool.coverage.run]
+omit = ["tests/*"]
+relative_files = true
+
 [tool.ruff]
 line-length = 100
 

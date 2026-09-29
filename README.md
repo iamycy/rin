@@ -112,7 +112,7 @@ voicing = my_voicing(abs_conf, edges, confidences)
 ## Development
 
 ```sh
-pixi run test        # pytest
+pixi run test        # pytest with branch coverage
 pixi run lint        # ruff check
 pixi run docstrings  # numpydoc validation of the public API
 pixi run format      # ruff format
