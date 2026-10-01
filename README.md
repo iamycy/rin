@@ -1,5 +1,12 @@
 # RIN (Relative Interval Networks)
 
+[![arXiv](https://img.shields.io/badge/arXiv-2609.39852-b31b1b.svg)](https://arxiv.org/abs/2609.39852)
+[![PyPI](https://img.shields.io/pypi/v/rin-pitch)](https://pypi.org/project/rin-pitch/)
+[![Python versions](https://img.shields.io/pypi/pyversions/rin-pitch)](https://pypi.org/project/rin-pitch/)
+[![CI](https://github.com/iamycy/rin/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/iamycy/rin/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/iamycy/rin/branch/main/graph/badge.svg)](https://app.codecov.io/gh/iamycy/rin)
+[![License: MIT](https://img.shields.io/pypi/l/rin-pitch)](https://github.com/iamycy/rin/blob/main/LICENSE)
+
 This is the reference implementation accompanying the paper [Pitch Smoothing Using Relative Interval Networks](https://arxiv.org/abs/2609.39852), submitted to ICASSP 2027.
 We propose a method for smoothing pitch estimates by combining absolute pitch measurements with multi-hop relative pitch differences, using a network-flow linear program for optimal fusion.
 Specifically, we solve the following objective function:
