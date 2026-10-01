@@ -46,6 +46,9 @@ source = "vcs"
 [tool.hatch.build.targets.wheel]
 packages = ["src/rin"]
 
+[tool.hatch.build.targets.sdist]
+include = ["src/rin", "tests"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
