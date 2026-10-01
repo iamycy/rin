@@ -2,6 +2,12 @@
 
 This is the reference implementation accompanying the paper [Pitch Smoothing Using Relative Interval Networks](https://arxiv.org/abs/2609.39852), submitted to ICASSP 2027.
 We propose a method for smoothing pitch estimates by combining absolute pitch measurements with multi-hop relative pitch differences, using a network-flow linear program for optimal fusion.
+Specifically, we solve the following objective function:
+
+```math
+\min_{\mathbf{f}} \mathbf{w}^\top \lvert \mathbf{B}^\top \mathbf{f} - \mathbf{\Delta} \rvert,
+```
+where $\mathbf{f}$ is the vector of smoothed pitch estimates, $\mathbf{\Delta}$ is the vector of observed absolute pitch and **relative pitch differences**, $\mathbf{B}$ is the incidence matrix encoding the absolute and relative edges, and $\mathbf{w}$ is a vector of weights.
 
 ## Install
 
