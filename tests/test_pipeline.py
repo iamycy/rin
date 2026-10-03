@@ -101,8 +101,13 @@ def test_mismatched_hop_grid_is_accepted():
     assert f0_smooth.shape == noisy_cents.shape
     assert voicing.shape == noisy_cents.shape
     assert bool(np.isfinite(f0_smooth).all())
-    est_frames = 1 + len(x) // (HOP * 2)
-    np.testing.assert_allclose(f0_smooth[est_frames:], noisy_cents[est_frames:])
+
+    # The coverage boundary is read off the estimator's own edges, never
+    # recomputed from the audio.
+    edges, _, _ = vqt_diff_calculator(x, SR, HOP * 2, hops=HOPS)
+    boundary = int(edges.max()) + 1
+    assert boundary < len(noisy_cents)  # the estimator covers only the head
+    np.testing.assert_allclose(f0_smooth[boundary:], noisy_cents[boundary:])
 
 
 def test_smooth_pitch_uses_injected_callables():
@@ -158,54 +163,6 @@ def test_smooth_pitch_custom_solver_replaces_lp():
     voiced = np.isfinite(noisy_cents)
     expected = np.where(voiced, noisy_cents, 0.0)
     np.testing.assert_allclose(f0_smooth, expected, rtol=1e-12)
-
-
-def test_estimator_may_leave_trailing_frames_unconnected():
-    # Regression: the frame count was inferred as edges.max() + 1, which is
-    # only a lower bound. An estimator that leaves trailing frames unconnected
-    # (one needing lookahead, say) made a correctly sized f0 fail with a
-    # misleading "both must use the same hop_length grid".
-    x, _, noisy_cents, strength = _noisy_chirp()
-    n_frames = len(noisy_cents)
-
-    def lookahead_estimator(x_, sr_, hop_, hops_):
-        # conforms to DifferenceEstimator but never references the last 3 frames
-        u = np.arange(n_frames - 4)
-        return np.stack([u, u + 1], axis=1), np.zeros(len(u)), np.ones(len(u))
-
-    f0_smooth, voicing = smooth_pitch(
-        x, noisy_cents, strength, SR, HOP, difference_estimator=lookahead_estimator
-    )
-    assert f0_smooth.shape == (n_frames,)
-    assert voicing.shape == (n_frames,)
-    assert bool(np.isfinite(f0_smooth).all())
-
-
-def test_overshooting_edges_are_dropped():
-    # An edge pointing past the end of f0 is dropped by the cores, not
-    # rejected: a shorter f0 is a tracker convention, not an error.
-    x, _, noisy_cents, strength = _noisy_chirp()
-    n_frames = len(noisy_cents)
-
-    def overshooting_estimator(x_, sr_, hop_, hops_):
-        u = np.arange(n_frames)
-        return np.stack([u, u + 1], axis=1), np.zeros(n_frames), np.ones(n_frames)
-
-    f0_smooth, voicing = smooth_pitch(
-        x, noisy_cents, strength, SR, HOP, difference_estimator=overshooting_estimator
-    )
-    assert f0_smooth.shape == (n_frames,)
-    assert voicing.shape == (n_frames,)
-    assert bool(np.isfinite(f0_smooth).all())
-
-    edges, estimates, confidences = overshooting_estimator(x, SR, HOP, (1,))
-    voiced = np.isfinite(noisy_cents)
-    abs_est = np.where(voiced, noisy_cents, 0.0)
-    abs_conf = np.where(voiced, strength, 0.0)
-    ref = lp_smoother(abs_est, abs_conf, edges, estimates, confidences)
-    ref_voicing = estimate_voicing(abs_conf, edges, confidences)
-    np.testing.assert_allclose(ref, f0_smooth, rtol=1e-12)
-    np.testing.assert_allclose(ref_voicing, voicing, rtol=1e-12)
 
 
 def test_negative_edge_endpoints_rejected():

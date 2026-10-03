@@ -94,7 +94,8 @@ def smooth_pitch(
     disagree on the exact count (one may or may not emit the frame centred on
     the clip's last sample). Relative edges that overshoot ``len(f0)`` are
     dropped by the solver and voicing estimator, and frames no edge reaches
-    fall back to their absolute estimates in the contour.
+    fall back to their absolute estimates in the contour (with zero voicing,
+    since relative evidence is absent there).
     """
     f0 = np.asarray(f0, dtype=float)
     strength = np.asarray(strength, dtype=float)
@@ -108,11 +109,13 @@ def smooth_pitch(
     # Overshooting edges are dropped downstream by the cores' shared edge
     # mask; only negative endpoints are rejected here, since no framing
     # convention justifies them and they would otherwise vanish silently.
-    if edges.size and int(edges.min()) < 0:
-        raise ValueError(
-            f"the estimator produced an edge referencing frame {int(edges.min())}, "
-            f"outside [0, {len(f0)}); edge endpoints must be non-negative frame indices"
-        )
+    if edges.size:
+        lo = int(edges.min())
+        if lo < 0:
+            raise ValueError(
+                f"the estimator produced an edge referencing frame {lo}, "
+                f"outside [0, {len(f0)}); edge endpoints must be non-negative frame indices"
+            )
 
     # Unvoiced (non-finite) frames get zero absolute confidence, so the LP
     # positions them from the relative edges. (``lp_smoother`` floors absolute
