@@ -65,7 +65,7 @@ One high-level function plus three cores:
 
 - `rin.smooth_pitch(x, f0, strength, sr, hop_length, hops=(1, 5), ...)` runs the paper's pipeline in one call: VQT relative diffs, dual LP fusion, and voicing.
   `f0` in cents with NaN = unvoiced; returns `(f0_smooth, voicing)` in cents.
-  `f0` must sit on the same `hop_length` grid as the audio, and `smooth_pitch` raises if it does not.
+  `f0` defines the frame grid: its length sets the output length and is never checked against the audio, since trackers disagree on the exact frame count, and relative edges past its end are dropped.
   Each stage is swappable via `difference_estimator`, `solver`, and `voicing_estimator` keyword arguments (any callable obeying the `rin.interfaces` contracts); configure a stage with `functools.partial`, e.g. `difference_estimator=partial(vqt_diff_calculator, max_diff_cents=500.0)`.
 
 Three core functions (for custom wiring):

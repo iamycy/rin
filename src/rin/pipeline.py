@@ -84,9 +84,17 @@ def smooth_pitch(
     Raises
     ------
     ValueError
-        If ``f0``/``strength`` are not 1-D of equal length, if an edge from
-        the estimator references a frame outside ``[0, len(f0))``, or if
-        ``f0`` is longer than the ``hop_length`` grid allows.
+        If ``f0``/``strength`` are not 1-D of equal length, or if an edge
+        from the estimator has a negative endpoint.
+
+    Notes
+    -----
+    ``f0`` defines the frame grid: ``len(f0)`` sets the output length and is
+    never compared against a frame count derived from ``x``, because trackers
+    disagree on the exact count (one may or may not emit the frame centred on
+    the clip's last sample). Relative edges that overshoot ``len(f0)`` are
+    dropped by the solver and voicing estimator, and frames no edge reaches
+    fall back to their absolute estimates in the contour.
     """
     f0 = np.asarray(f0, dtype=float)
     strength = np.asarray(strength, dtype=float)
@@ -94,30 +102,16 @@ def smooth_pitch(
         raise ValueError("f0 and strength must be 1-D arrays of the same length")
 
     edges, estimates, confidences = difference_estimator(x, sr, hop_length, hops)
-    # ``f0`` must sit on the estimator's frame grid: every edge must index
-    # into it (an out-of-range one is silently dropped downstream), and it may
-    # not be longer than the hop grid holds (e.g. computed at a different
-    # hop_length). Not an equality check against ``edges.max() + 1``, which is
-    # only a lower bound, since an estimator may leave trailing frames
-    # unconnected, so it would reject a correctly sized ``f0``. When there are
-    # no edges at all, though, nothing constrains ``f0`` from below (the
-    # upper-bound check on edges is what does that in the general case), so
-    # the hop grid is required exactly.
-    n_samples = np.shape(x)[-1]
-    grid_frames = 1 + n_samples // hop_length
-    if edges.size:
-        lo, hi = int(edges.min()), int(edges.max())
-        if lo < 0 or hi >= len(f0):
-            bad = hi if hi >= len(f0) else lo
-            raise ValueError(
-                f"the estimator produced an edge referencing frame {bad}, outside "
-                f"[0, {len(f0)}); both must use the same hop_length grid"
-            )
-    if len(f0) > grid_frames or (not edges.size and len(f0) != grid_frames):
+    # ``f0`` defines the frame grid: its length is authoritative and is never
+    # compared against a frame count derived from ``x`` (trackers disagree on
+    # the exact count, so any such formula misfires on some tracker).
+    # Overshooting edges are dropped downstream by the cores' shared edge
+    # mask; only negative endpoints are rejected here, since no framing
+    # convention justifies them and they would otherwise vanish silently.
+    if edges.size and int(edges.min()) < 0:
         raise ValueError(
-            f"f0 has {len(f0)} frames but hop_length={hop_length} over "
-            f"{n_samples} samples gives {grid_frames}; "
-            "both must use the same hop_length grid"
+            f"the estimator produced an edge referencing frame {int(edges.min())}, "
+            f"outside [0, {len(f0)}); edge endpoints must be non-negative frame indices"
         )
 
     # Unvoiced (non-finite) frames get zero absolute confidence, so the LP
