@@ -42,7 +42,7 @@ from rin import smooth_pitch
 hop_length = int(0.02 * sr)
 
 # the paper's pipeline in one call: VQT relative diffs -> dual LP fusion
-# -> voicing, with the paper's fixed settings (hops 1,2,3,5; Pearson xcorr;
+# -> voicing, with the paper's fixed settings (hops 1,5; Pearson xcorr;
 # arcsin x peak2mean weighting)
 f0_smooth, voicing = smooth_pitch(x, f0, strength, sr, hop_length)
 ```
@@ -63,7 +63,7 @@ Arrays in, arrays out: the package does no file loading and no caching.
 
 One high-level function plus three cores:
 
-- `rin.smooth_pitch(x, f0, strength, sr, hop_length, hops=(1, 2, 3, 5), ...)` runs the paper's pipeline in one call: VQT relative diffs, dual LP fusion, and voicing.
+- `rin.smooth_pitch(x, f0, strength, sr, hop_length, hops=(1, 5), ...)` runs the paper's pipeline in one call: VQT relative diffs, dual LP fusion, and voicing.
   `f0` in cents with NaN = unvoiced; returns `(f0_smooth, voicing)` in cents.
   `f0` must sit on the same `hop_length` grid as the audio, and `smooth_pitch` raises if it does not.
   Each stage is swappable via `difference_estimator`, `solver`, and `voicing_estimator` keyword arguments (any callable obeying the `rin.interfaces` contracts); configure a stage with `functools.partial`, e.g. `difference_estimator=partial(vqt_diff_calculator, max_diff_cents=500.0)`.
@@ -117,7 +117,7 @@ f0_smooth, voicing = smooth_pitch(
 )
 
 # ...or wire them by hand:
-edges, estimates, confidences = my_estimator(x, sr, hop_length, hops=(1, 2, 3, 5))
+edges, estimates, confidences = my_estimator(x, sr, hop_length, hops=(1, 5))
 smooth_cents = my_solver(f0_cents, abs_conf, edges, estimates, confidences)
 voicing = my_voicing(abs_conf, edges, confidences)
 ```
