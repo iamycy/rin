@@ -59,7 +59,11 @@ def smooth_pitch(
     sr : int
         Sample rate in Hz.
     hop_length : int
-        Hop length in samples (shared by the estimator and ``f0``).
+        Hop length in samples (shared by the estimator and ``f0``). The
+        frame grid holds ``1 + len(x) // hop_length`` frames; ``f0`` may
+        also be exactly one frame shorter, for trackers that omit the frame
+        centred on the clip's last sample (libf0's SWIPE, PENN), in which
+        case the edges reaching that frame are dropped.
     hops : sequence of int
         Hop differences for the relative estimator.
     difference_estimator : DifferenceEstimator, optional
@@ -84,9 +88,10 @@ def smooth_pitch(
     Raises
     ------
     ValueError
-        If ``f0``/``strength`` are not 1-D of equal length, if an edge from
-        the estimator references a frame outside ``[0, len(f0))``, or if
-        ``f0`` is longer than the ``hop_length`` grid allows.
+        If ``f0``/``strength`` are not 1-D of equal length, if ``f0`` is
+        longer than the ``hop_length`` grid or more than one frame shorter,
+        or if an edge from the estimator references a frame outside
+        ``[0, len(f0))`` other than the one omitted trailing frame.
     """
     f0 = np.asarray(f0, dtype=float)
     strength = np.asarray(strength, dtype=float)
@@ -94,31 +99,37 @@ def smooth_pitch(
         raise ValueError("f0 and strength must be 1-D arrays of the same length")
 
     edges, estimates, confidences = difference_estimator(x, sr, hop_length, hops)
-    # ``f0`` must sit on the estimator's frame grid: every edge must index
-    # into it (an out-of-range one is silently dropped downstream), and it may
-    # not be longer than the hop grid holds (e.g. computed at a different
-    # hop_length). Not an equality check against ``edges.max() + 1``, which is
+    # ``f0`` must sit on the estimator's frame grid. The grid holds
+    # ``1 + n_samples // hop_length`` frames (librosa's convention, which the
+    # built-in estimator inherits), but trackers disagree on whether the last
+    # of those frames exists: it is centred on the clip's final sample, and
+    # libf0's SWIPE (``ceil(n / hop)`` frames) and PENN (``floor(n / hop)``)
+    # both omit it whenever it would land there. So ``f0`` may be the full
+    # grid or exactly one frame short of it; the cores drop the edges that
+    # reach the missing trailing frame, which carries no absolute estimate.
+    # Anything shorter, or longer, means a different hop_length and is
+    # rejected. Every edge must then index into ``f0``, except that an edge
+    # reaching exactly the omitted trailing frame is allowed (and dropped
+    # downstream). Not an equality check against ``edges.max() + 1``, which is
     # only a lower bound, since an estimator may leave trailing frames
-    # unconnected, so it would reject a correctly sized ``f0``. When there are
-    # no edges at all, though, nothing constrains ``f0`` from below (the
-    # upper-bound check on edges is what does that in the general case), so
-    # the hop grid is required exactly.
+    # unconnected, so it would reject a correctly sized ``f0``.
     n_samples = np.shape(x)[-1]
     grid_frames = 1 + n_samples // hop_length
+    if not (grid_frames - 1 <= len(f0) <= grid_frames):
+        raise ValueError(
+            f"f0 has {len(f0)} frames but hop_length={hop_length} over "
+            f"{n_samples} samples gives {grid_frames} (or {grid_frames - 1} for a "
+            "tracker that omits the frame on the last sample); "
+            "both must use the same hop_length grid"
+        )
     if edges.size:
         lo, hi = int(edges.min()), int(edges.max())
-        if lo < 0 or hi >= len(f0):
-            bad = hi if hi >= len(f0) else lo
+        if lo < 0 or hi > len(f0) or (hi == len(f0) and len(f0) == grid_frames):
+            bad = lo if lo < 0 else hi
             raise ValueError(
                 f"the estimator produced an edge referencing frame {bad}, outside "
                 f"[0, {len(f0)}); both must use the same hop_length grid"
             )
-    if len(f0) > grid_frames or (not edges.size and len(f0) != grid_frames):
-        raise ValueError(
-            f"f0 has {len(f0)} frames but hop_length={hop_length} over "
-            f"{n_samples} samples gives {grid_frames}; "
-            "both must use the same hop_length grid"
-        )
 
     # Unvoiced (non-finite) frames get zero absolute confidence, so the LP
     # positions them from the relative edges. (``lp_smoother`` floors absolute

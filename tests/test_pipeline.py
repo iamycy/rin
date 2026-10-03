@@ -10,7 +10,7 @@ from functools import partial
 import numpy as np
 import pytest
 
-from rin import estimate_voicing, lp_smoother, smooth_pitch, vqt_diff_calculator
+from rin import HOPS, estimate_voicing, lp_smoother, smooth_pitch, vqt_diff_calculator
 
 SR = 16000
 HOP = int(0.02 * SR)
@@ -145,6 +145,39 @@ def test_estimator_may_leave_trailing_frames_unconnected():
     assert f0_smooth.shape == (n_frames,)
     assert voicing.shape == (n_frames,)
     assert bool(np.isfinite(f0_smooth).all())
+
+
+def test_tracker_one_frame_short_of_grid_is_accepted():
+    # The grid has 1 + n // hop frames, but libf0's SWIPE (ceil(n / hop)) and
+    # PENN (floor(n / hop)) omit the frame centred on the clip's last sample
+    # when it would exist. Such an f0 is accepted: the edges reaching the
+    # missing frame are dropped by the cores, the output keeps f0's length,
+    # and it matches wiring the cores by hand with that same f0.
+    x, _, noisy_cents, strength = _noisy_chirp()
+    n_frames = len(noisy_cents)
+    assert n_frames == 1 + len(x) // HOP
+    short_cents, short_strength = noisy_cents[:-1], strength[:-1]
+
+    f0_smooth, voicing = smooth_pitch(x, short_cents, short_strength, SR, HOP)
+    assert f0_smooth.shape == (n_frames - 1,)
+    assert voicing.shape == (n_frames - 1,)
+
+    edges, estimates, confidences = vqt_diff_calculator(x, SR, HOP, hops=HOPS)
+    assert int(edges.max()) == n_frames - 1  # the estimator does reach the omitted frame
+    voiced = np.isfinite(short_cents)
+    abs_est = np.where(voiced, short_cents, 0.0)
+    abs_conf = np.where(voiced, short_strength, 0.0)
+    ref = lp_smoother(abs_est, abs_conf, edges, estimates, confidences)
+    ref_voicing = estimate_voicing(abs_conf, edges, confidences)
+    np.testing.assert_allclose(ref, f0_smooth, rtol=1e-12)
+    np.testing.assert_allclose(ref_voicing, voicing, rtol=1e-12)
+
+
+def test_tracker_two_frames_short_of_grid_is_rejected():
+    # One missing trailing frame is a convention; two is a different hop.
+    x, _, noisy_cents, strength = _noisy_chirp()
+    with pytest.raises(ValueError, match="both must use the same hop_length grid"):
+        smooth_pitch(x, noisy_cents[:-2], strength[:-2], SR, HOP)
 
 
 def test_out_of_range_edges_from_estimator_rejected():
