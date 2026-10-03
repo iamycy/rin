@@ -115,7 +115,7 @@ Consequences when editing:
 
 `relative.py` implements one fixed estimation path, the paper's, and it is intentionally not configurable: Pearson (mean-subtracted) normalized cross-correlation of VQT magnitude slices, with confidence = `arcsin` dot weight × `peak2mean` flatness weight (`_dot_weight` × `_flat_weight`).
 VQT shape parameters (`bins_per_octave=36`, `n_bins=252`, `max_diff_cents=600`) and extra `librosa.vqt` kwargs are plain arguments.
-The paper's hop set is `HOPS = (1, 2, 3, 5)`, exported from `rin`.
+The paper's hop set is `HOPS = (1, 5)`, exported from `rin`.
 
 Performance structure: `_compute_vqt` and `_vqt_xcorr_setup` are factored out because the padded VQT, sliding-window view, and window norms depend only on `(V, max_diff_bins)` and not on the hop, so they are computed once per clip and passed into every `_hop_diff` call.
 Keep new per-hop work out of the setup and vice versa.

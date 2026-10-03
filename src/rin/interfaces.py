@@ -33,7 +33,7 @@ sr : int
 hop_length : int
     Frame hop in samples (defines the output frame grid).
 hops : sequence of int
-    Relative frame offsets to estimate, e.g. ``(1, 2, 3, 5)``.
+    Relative frame offsets to estimate, e.g. ``(1, 5)``.
 
 Returns
 -------
