@@ -82,8 +82,10 @@ Any callable with the right positional signature works (function, lambda, `funct
 - **Pitch domain is never converted.** `abs_estimates` and `rel_estimates` must already share one domain; the output is in that same domain.
   The built-in estimator emits cents, so `smooth_pitch` documents cents in / cents out, but `lp_smoother` itself is domain-agnostic.
   Hz↔cents conversion is the caller's responsibility and must not be added inside the package.
-- **`f0` defines the frame grid.** `smooth_pitch` treats `len(f0)` as authoritative and bounds it from two sides: every edge must index into it (an endpoint outside `[0, len(f0))` is silently dropped downstream, so it is rejected up front), and `len(f0)` may not exceed `1 + n_samples // hop_length` (which catches an `f0` computed at a different hop).
-  It is deliberately *not* an equality check against `edges.max() + 1`, which is only a lower bound on the frame count, and an estimator may legitimately leave trailing frames unconnected.
+- **`f0` defines the frame grid, unchecked.** `smooth_pitch` treats `len(f0)` as authoritative and never compares it against a frame count derived from `x`, because trackers disagree on the exact count (librosa counts the frame centred on the clip's last sample, libf0's SWIPE and PENN do not).
+  Estimator edges that overshoot `len(f0)` are dropped by `smooth_pitch` itself before the solver and voicing stages run, because the `Solver` and `VoicingEstimator` contracts do not require an injected stage to tolerate out-of-range edges (the built-in cores would also drop them through `_edge_keep_mask`).
+  Only negative endpoints are rejected up front, since no framing convention justifies them and they would otherwise vanish silently.
+  There is deliberately no equality check against `edges.max() + 1`, which is only a lower bound on the frame count, and an estimator may legitimately leave trailing frames unconnected.
 - **Unvoiced frames are expressed as zero absolute confidence,** not as a separate mask.
   `smooth_pitch` maps non-finite `f0` to `abs_est = 0.0, abs_conf = 0.0`, and the LP positions those frames from the relative edges.
   (The `1e-6` weight floor in `lp_smoother` leaves a residual pull toward `0.0`, negligible beside real edge weights.)
