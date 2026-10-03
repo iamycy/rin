@@ -24,7 +24,7 @@ from .lp import estimate_voicing, lp_smoother
 from .relative import vqt_diff_calculator
 
 # Hop set reported in the paper.
-HOPS = (1, 2, 3, 5)
+HOPS = (1, 5)
 
 
 def smooth_pitch(
