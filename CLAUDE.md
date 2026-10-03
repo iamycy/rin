@@ -83,7 +83,7 @@ Any callable with the right positional signature works (function, lambda, `funct
   The built-in estimator emits cents, so `smooth_pitch` documents cents in / cents out, but `lp_smoother` itself is domain-agnostic.
   Hz↔cents conversion is the caller's responsibility and must not be added inside the package.
 - **`f0` defines the frame grid, unchecked.** `smooth_pitch` treats `len(f0)` as authoritative and never compares it against a frame count derived from `x`, because trackers disagree on the exact count (librosa counts the frame centred on the clip's last sample, libf0's SWIPE and PENN do not).
-  Estimator edges that overshoot `len(f0)` are dropped downstream by the shared `_edge_keep_mask`.
+  Estimator edges that overshoot `len(f0)` are dropped by `smooth_pitch` itself before the solver and voicing stages run, because the `Solver` and `VoicingEstimator` contracts do not require an injected stage to tolerate out-of-range edges (the built-in cores would also drop them through `_edge_keep_mask`).
   Only negative endpoints are rejected up front, since no framing convention justifies them and they would otherwise vanish silently.
   There is deliberately no equality check against `edges.max() + 1`, which is only a lower bound on the frame count, and an estimator may legitimately leave trailing frames unconnected.
 - **Unvoiced frames are expressed as zero absolute confidence,** not as a separate mask.

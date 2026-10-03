@@ -93,9 +93,10 @@ def smooth_pitch(
     never compared against a frame count derived from ``x``, because trackers
     disagree on the exact count (one may or may not emit the frame centred on
     the clip's last sample). Relative edges that overshoot ``len(f0)`` are
-    dropped by the solver and voicing estimator, and frames no edge reaches
-    fall back to their absolute estimates in the contour (with zero voicing,
-    since relative evidence is absent there).
+    dropped before the solver and voicing estimator see them. With the
+    default stages, frames no edge reaches fall back to their absolute
+    estimates in the contour (0.0 where unvoiced) and get zero voicing,
+    since relative evidence is absent there.
     """
     f0 = np.asarray(f0, dtype=float)
     strength = np.asarray(strength, dtype=float)
@@ -106,16 +107,21 @@ def smooth_pitch(
     # ``f0`` defines the frame grid: its length is authoritative and is never
     # compared against a frame count derived from ``x`` (trackers disagree on
     # the exact count, so any such formula misfires on some tracker).
-    # Overshooting edges are dropped downstream by the cores' shared edge
-    # mask; only negative endpoints are rejected here, since no framing
-    # convention justifies them and they would otherwise vanish silently.
+    # Overshooting edges are dropped here rather than left to the cores'
+    # shared edge mask, since the solver and voicing contracts do not require
+    # an injected stage to tolerate them. Only negative endpoints are
+    # rejected, since no framing convention justifies them and they would
+    # otherwise vanish silently.
     if edges.size:
-        lo = int(edges.min())
+        lo, hi = int(edges.min()), int(edges.max())
         if lo < 0:
             raise ValueError(
                 f"the estimator produced an edge referencing frame {lo}, "
                 f"outside [0, {len(f0)}); edge endpoints must be non-negative frame indices"
             )
+        if hi >= len(f0):
+            keep = np.all(edges < len(f0), axis=1)
+            edges, estimates, confidences = edges[keep], estimates[keep], confidences[keep]
 
     # Unvoiced (non-finite) frames get zero absolute confidence, so the LP
     # positions them from the relative edges. (``lp_smoother`` floors absolute

@@ -93,6 +93,44 @@ def test_tracker_short_f0_is_accepted():
     np.testing.assert_allclose(ref_voicing, voicing, rtol=1e-12)
 
 
+def test_injected_stages_never_see_overshooting_edges():
+    # The solver and voicing contracts do not require a plugin to tolerate
+    # out-of-range edges, so smooth_pitch must drop them before dispatching:
+    # a plugin that indexes by edge endpoint must not overrun a short f0.
+    x, _, noisy_cents, strength = _noisy_chirp()
+    short_cents, short_strength = noisy_cents[:-1], strength[:-1]
+    M = len(short_cents)
+    seen = {}
+
+    def strict_solver(abs_est, abs_conf, edges, estimates, confidences):
+        seen["solver"] = (int(edges.max()), len(edges), len(estimates), len(confidences))
+        abs_est[edges[:, 1]]  # raises IndexError on an overshooting edge
+        return lp_smoother(abs_est, abs_conf, edges, estimates, confidences)
+
+    def strict_voicing(abs_conf, edges, confidences):
+        seen["voicing"] = (int(edges.max()), len(edges), len(confidences))
+        abs_conf[edges[:, 1]]
+        return estimate_voicing(abs_conf, edges, confidences)
+
+    f0_smooth, voicing = smooth_pitch(
+        x,
+        short_cents,
+        short_strength,
+        SR,
+        HOP,
+        solver=strict_solver,
+        voicing_estimator=strict_voicing,
+    )
+    hi, n_edges, n_est, n_conf = seen["solver"]
+    assert hi < M and n_edges == n_est == n_conf
+    hi, n_edges, n_conf = seen["voicing"]
+    assert hi < M and n_edges == n_conf
+
+    ref, ref_voicing = smooth_pitch(x, short_cents, short_strength, SR, HOP)
+    np.testing.assert_allclose(ref, f0_smooth, rtol=1e-12)
+    np.testing.assert_allclose(ref_voicing, voicing, rtol=1e-12)
+
+
 def test_mismatched_hop_grid_is_accepted():
     # An f0 computed at a different hop is no longer rejected: frames the
     # estimator does not reach keep their absolute estimates.
